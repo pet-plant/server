@@ -1,0 +1,17 @@
+# Build context is the repo root — keep it small and reproducible.
+.git/
+.venv/
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+docs/
+tests/
+scripts/
+*.md
