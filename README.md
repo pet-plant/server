@@ -289,12 +289,3 @@ uv run uvicorn main_web:app --app-dir src --reload
   owning contexts as work begins.
 - Whether individual pipeline hand-offs are synchronous calls or events.
 
-## Documents
-
-See [`docs/README.md`](docs/README.md) for the full index. Key sources:
-
-- `docs/architecture.svg` — bounded contexts and data flow (authoritative).
-- `docs/Pet-Plant_Proposal_v2.docx` — vision, approach, mandatory requirements
-  (MR-1…MR-5), extension goals, milestones, week plan, success criteria, and a
-  fully worked pipeline example.
-- `docs/context_and_tasks.docx` — the eight contexts and their task lists.
