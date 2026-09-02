@@ -26,4 +26,40 @@ context — it has no business rules and no domain tables.
 
 ## Internal design
 
-Left to the core owner, within the rules above.
+Layout (one subpackage per concern; grows as `core` takes on more):
+
+```
+src/core/
+├── api.py              # health router (mounted by main_web)
+├── config.py           # Settings + get_settings() — typed env access
+├── db.py               # engine / SessionLocal / Base / get_session dep / init_models()
+├── security/           # crypto mechanism, no domain knowledge
+│   ├── password.py     # hash_password / verify_password (PBKDF2-HMAC-SHA256, stdlib)
+│   └── jwt.py          # create_access_token / decode_access_token (PyJWT, HS256)
+└── users/              # user identity + JWT auth policy — owns auth.users
+    ├── models.py       # User (id, email, name, hashed_password, is_active, timestamps)
+    ├── schemas.py      # UserCreate / UserRead / Token
+    ├── service.py      # create_user / authenticate_user / get_user_by_*
+    ├── dependencies.py # oauth2_scheme, get_current_user, get_current_active_user, CurrentUser
+    └── api.py          # router: POST /auth/register, POST /auth/token, GET /auth/me
+```
+
+### Auth usage
+
+Other contexts inject the dependency in their own `api.py`:
+
+```python
+from core.users import CurrentUser  # Annotated[User, Depends(get_current_active_user)]
+
+@router.get("/plants")
+def list_plants(user: CurrentUser) -> ...:
+    ...
+```
+
+`POST /auth/token` takes an OAuth2 password form (`username` = email), so the
+**Authorize** button in `/docs` works. `main_web` mounts the `/auth` router
+alongside the health router.
+
+Until per-schema Alembic migrations land, `core.db.init_models()` creates the
+`auth` schema and its tables directly (used by tests; call it once for a local
+run against Postgres).
