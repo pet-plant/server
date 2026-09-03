@@ -1,7 +1,13 @@
-"""Typed application configuration, loaded once from the environment.
+"""Typed application configuration.
 
-Every context imports :func:`get_settings` rather than reading ``os.environ``
-directly. Variable names mirror ``.env.example`` (owned by ``core``).
+Field *values* are not hard-coded here — only their names and types. They are
+read (each layer overriding the previous) from:
+
+1. ``.env.example`` — committed defaults, the single source of default config;
+2. ``.env`` — optional local overrides (git-ignored);
+3. real environment variables — deployment / compose overrides.
+
+Every context imports :func:`get_settings` rather than reading ``os.environ``.
 """
 
 from functools import lru_cache
@@ -11,28 +17,40 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env.example", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
 
     # --- app ---
-    app_env: str = "local"
-    log_level: str = "INFO"
+    app_env: str
+    log_level: str
 
     # --- PostgreSQL ---
-    database_url: str = "postgresql+psycopg://petplant:petplant@localhost:5432/petplant"
+    database_url: str
+
+    # --- MinIO / S3 (object storage; client lives in core.storage) ---
+    minio_endpoint: str
+    minio_access_key: str
+    minio_secret_key: str
+    minio_secure: bool
+    minio_bucket_captures: str
+    minio_bucket_frames_derived: str
+    minio_bucket_exemplars: str
+    minio_bucket_eval_sets: str
 
     # --- auth (OAuth2 / JWT, role-based) ---
-    jwt_issuer: str = "pet-plant"
-    jwt_audience: str = "pet-plant-api"
-    jwt_alg: str = "HS256"
-    jwt_secret: str = "change-me"
-    access_token_ttl_seconds: int = 3600
+    jwt_issuer: str
+    jwt_audience: str
+    jwt_alg: str
+    jwt_secret: str
+    access_token_ttl_seconds: int
 
 
 @lru_cache
 def get_settings() -> Settings:
     """Return the process-wide settings singleton."""
-    return Settings()
+    # Values are supplied by the env-file / environment sources, not as
+    # constructor arguments — hence the ignore for the "missing argument" check.
+    return Settings()  # type: ignore[call-arg]
