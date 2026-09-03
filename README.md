@@ -77,7 +77,7 @@ pet-plant-server/
 ├── compose.yaml              # `docker compose up` → Postgres + MinIO (+ buckets) + web
 ├── pyproject.toml            # project metadata, fixed deps, tooling (uv, Python 3.12, ruff, mypy, pytest)
 ├── uv.lock                   # dependency lockfile — committed
-├── .env.example              # environment variables (owned by core)
+├── .env.example              # config schema + committed defaults (owned by core)
 ├── .gitignore
 ├── .dockerignore
 ├── docker/
@@ -252,8 +252,8 @@ docker compose up --build            # add -d to detach; drop --build after the 
 ```
 
 `web` comes up on <http://localhost:8000> (`/health`, `/docs`) once `postgres` and
-`minio` report healthy. It reads `.env` if present, but the stack also starts
-without one. To override defaults:
+`minio` report healthy. Committed defaults live in `.env.example` (read by
+`core.config`), so the stack starts with no `.env`. To override locally:
 
 ```bash
 cp .env.example .env                 # optional; then edit
