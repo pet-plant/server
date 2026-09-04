@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     jwt_secret: str
     access_token_ttl_seconds: int
 
+    # --- auth: bootstrap admin (seeded on startup by core.users.ensure_admin_user) ---
+    admin_email: str
+    admin_name: str
+    admin_password: str
+
 
 @lru_cache
 def get_settings() -> Settings:
