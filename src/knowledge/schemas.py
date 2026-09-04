@@ -12,6 +12,25 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 # --------------------------------------------------------------------------- #
+# species
+# --------------------------------------------------------------------------- #
+
+
+class SpeciesCreate(BaseModel):
+    species_code: str = Field(min_length=1, max_length=64)
+    scientific_name: str = Field(min_length=1, max_length=200)
+    common_name: str | None = Field(default=None, max_length=200)
+
+
+class SpeciesRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    species_code: str
+    scientific_name: str
+    common_name: str | None
+
+
+# --------------------------------------------------------------------------- #
 # research_document
 # --------------------------------------------------------------------------- #
 

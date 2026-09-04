@@ -10,18 +10,51 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from knowledge.db import metric_set_freshness
+from knowledge.db import metric_set_freshness, utcnow
 from knowledge.hashing import content_hash
 from knowledge.models import Metric, MetricSet, ResearchDocument, Species
-from knowledge.schemas import DocumentCreate, DocumentUpdate
+from knowledge.schemas import DocumentCreate, DocumentUpdate, SpeciesCreate
 
 
 class UnknownSpeciesError(Exception):
     """Raised when a document references a ``species_code`` that does not exist."""
 
 
+class SpeciesAlreadyExistsError(Exception):
+    """Raised when registering a ``species_code`` that is already taken."""
+
+
 class DocumentInUseError(Exception):
     """Raised when deleting a document that a metric set still references."""
+
+
+class MetricSetTransitionError(Exception):
+    """Raised for an illegal ``metric_set.status`` transition."""
+
+
+# --------------------------------------------------------------------------- #
+# species
+# --------------------------------------------------------------------------- #
+
+
+def create_species(session: Session, data: SpeciesCreate) -> Species:
+    if session.get(Species, data.species_code) is not None:
+        raise SpeciesAlreadyExistsError(data.species_code)
+    species = Species(
+        species_code=data.species_code,
+        scientific_name=data.scientific_name,
+        common_name=data.common_name,
+    )
+    session.add(species)
+    session.commit()
+    session.refresh(species)
+    return species
+
+
+def list_species(session: Session) -> Sequence[Species]:
+    return session.scalars(
+        select(Species).order_by(Species.species_code)
+    ).all()
 
 
 # --------------------------------------------------------------------------- #
@@ -163,3 +196,36 @@ def get_current_metric_set(
 
 def is_metric_set_stale(session: Session, set_id: uuid.UUID) -> bool:
     return _staleness_map(session).get(set_id, False)
+
+
+# --------------------------------------------------------------------------- #
+# metric_set status transitions
+# --------------------------------------------------------------------------- #
+
+
+def approve_metric_set(
+    session: Session, metric_set: MetricSet, *, approved_by: str
+) -> MetricSet:
+    if metric_set.status != "draft":
+        raise MetricSetTransitionError(
+            f"cannot approve a {metric_set.status} metric set"
+        )
+    if not metric_set.metrics:
+        raise MetricSetTransitionError("cannot approve a metric set with no metrics")
+    metric_set.status = "approved"
+    metric_set.approved_by = approved_by
+    metric_set.approved_at = utcnow()
+    session.commit()
+    session.refresh(metric_set)
+    return metric_set
+
+
+def archive_metric_set(session: Session, metric_set: MetricSet) -> MetricSet:
+    if metric_set.status != "approved":
+        raise MetricSetTransitionError(
+            f"cannot archive a {metric_set.status} metric set"
+        )
+    metric_set.status = "archived"
+    session.commit()
+    session.refresh(metric_set)
+    return metric_set

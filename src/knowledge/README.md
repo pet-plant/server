@@ -64,6 +64,8 @@ already stored, so there is no "create metric set" endpoint.
 
 | Method & path | Purpose |
 |---|---|
+| `POST /knowledge/species` | register a species (409 if `species_code` is taken) |
+| `GET /knowledge/species` | list registered species |
 | `POST /knowledge/documents` | create a research document (404 if `species_code` is unknown) |
 | `GET /knowledge/documents?species_code=` | list documents, newest first |
 | `GET /knowledge/documents/{id}` | one document |
@@ -71,7 +73,16 @@ already stored, so there is no "create metric set" endpoint.
 | `DELETE /knowledge/documents/{id}` | delete (409 if a metric set still references it) |
 | `GET /knowledge/species/{species_code}/metric-sets` | every metric set for the species with `status`, `is_stale`, `metric_count` |
 | `GET /knowledge/metric-sets/{id}` | one set with its metrics, each carrying `actions` and `exemplars` |
+| `POST /knowledge/metric-sets/{id}/approve` | `draft` → `approved` (`approved_by` = caller's email); 409 if not a draft or it has no metrics |
+| `POST /knowledge/metric-sets/{id}/archive` | `approved` → `archived`; 409 otherwise |
 | `GET /knowledge/species/{species_code}/metrics` | the current bundle — same payload as the interface below |
+
+### Authoring flow
+
+`register species → write research document → (LLM job builds a draft metric set —
+not wired yet) → approve`. `/species/{code}/metrics` and the in-process interface
+only ever return an **approved** set; approving a newer one supersedes the old
+without deleting it (archive the old one when you want it out of the list).
 
 ## Published interface (in-process)
 

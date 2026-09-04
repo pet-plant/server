@@ -15,7 +15,7 @@ from core.db import get_session
 from core.users import CurrentUser
 from knowledge import service
 from knowledge.interface import get_species_metrics as _species_metrics
-from knowledge.models import ResearchDocument
+from knowledge.models import MetricSet, ResearchDocument, Species
 from knowledge.schemas import (
     DocumentCreate,
     DocumentRead,
@@ -23,7 +23,9 @@ from knowledge.schemas import (
     MetricRead,
     MetricSetDetail,
     MetricSetSummary,
+    SpeciesCreate,
     SpeciesMetricsBundle,
+    SpeciesRead,
 )
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -36,6 +38,56 @@ def _document_or_404(session: Session, document_id: uuid.UUID) -> ResearchDocume
     if doc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
     return doc
+
+
+def _metric_set_or_404(session: Session, metric_set_id: uuid.UUID) -> MetricSet:
+    metric_set = service.get_metric_set(session, metric_set_id)
+    if metric_set is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Metric set not found")
+    return metric_set
+
+
+def _summary(
+    metric_set: MetricSet, *, is_stale: bool, metric_count: int
+) -> MetricSetSummary:
+    return MetricSetSummary(
+        id=metric_set.id,
+        research_document_id=metric_set.research_document_id,
+        llm_model=metric_set.llm_model,
+        prompt_version=metric_set.prompt_version,
+        status=metric_set.status,
+        generated_at=metric_set.generated_at,
+        approved_by=metric_set.approved_by,
+        approved_at=metric_set.approved_at,
+        is_stale=is_stale,
+        metric_count=metric_count,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# species
+# --------------------------------------------------------------------------- #
+
+
+@router.post(
+    "/species",
+    response_model=SpeciesRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_species(
+    payload: SpeciesCreate, session: SessionDep, _user: CurrentUser
+) -> Species:
+    try:
+        return service.create_species(session, payload)
+    except service.SpeciesAlreadyExistsError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "species_code already exists"
+        ) from None
+
+
+@router.get("/species", response_model=list[SpeciesRead])
+def list_species(session: SessionDep, _user: CurrentUser) -> Sequence[Species]:
+    return service.list_species(session)
 
 
 # --------------------------------------------------------------------------- #
@@ -111,18 +163,7 @@ def list_metric_sets(
     species_code: str, session: SessionDep, _user: CurrentUser
 ) -> list[MetricSetSummary]:
     return [
-        MetricSetSummary(
-            id=s.id,
-            research_document_id=s.research_document_id,
-            llm_model=s.llm_model,
-            prompt_version=s.prompt_version,
-            status=s.status,
-            generated_at=s.generated_at,
-            approved_by=s.approved_by,
-            approved_at=s.approved_at,
-            is_stale=stale,
-            metric_count=count,
-        )
+        _summary(s, is_stale=stale, metric_count=count)
         for s, stale, count in service.list_metric_sets(session, species_code)
     ]
 
@@ -146,6 +187,42 @@ def get_metric_set(
         is_stale=service.is_metric_set_stale(session, metric_set.id),
         metric_count=len(metric_set.metrics),
         metrics=[MetricRead.model_validate(m) for m in metric_set.metrics],
+    )
+
+
+@router.post(
+    "/metric-sets/{metric_set_id}/approve", response_model=MetricSetSummary
+)
+def approve_metric_set(
+    metric_set_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> MetricSetSummary:
+    metric_set = _metric_set_or_404(session, metric_set_id)
+    try:
+        service.approve_metric_set(session, metric_set, approved_by=user.email)
+    except service.MetricSetTransitionError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return _summary(
+        metric_set,
+        is_stale=service.is_metric_set_stale(session, metric_set.id),
+        metric_count=len(metric_set.metrics),
+    )
+
+
+@router.post(
+    "/metric-sets/{metric_set_id}/archive", response_model=MetricSetSummary
+)
+def archive_metric_set(
+    metric_set_id: uuid.UUID, session: SessionDep, _user: CurrentUser
+) -> MetricSetSummary:
+    metric_set = _metric_set_or_404(session, metric_set_id)
+    try:
+        service.archive_metric_set(session, metric_set)
+    except service.MetricSetTransitionError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return _summary(
+        metric_set,
+        is_stale=service.is_metric_set_stale(session, metric_set.id),
+        metric_count=len(metric_set.metrics),
     )
 
 
