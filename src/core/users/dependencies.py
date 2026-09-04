@@ -57,5 +57,18 @@ def get_current_active_user(
     return current_user
 
 
+def get_current_superuser(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> User:
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not enough privileges"
+        )
+    return current_user
+
+
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 """Convenience alias for route signatures in other contexts' ``api.py``."""
+
+CurrentSuperuser = Annotated[User, Depends(get_current_superuser)]
+"""Like :data:`CurrentUser`, but 403s unless the caller is an admin."""

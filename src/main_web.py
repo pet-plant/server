@@ -16,7 +16,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from core.api import router as health_router
-from core.db import init_models
+from core.db import SessionLocal, init_models
+from core.users import ensure_admin_user
 from core.users import router as auth_router
 from knowledge import router as knowledge_router
 from knowledge.db import init_models as init_knowledge_models

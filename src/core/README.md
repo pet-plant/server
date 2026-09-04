@@ -40,10 +40,10 @@ src/core/
 ├── storage/            # MinIO / S3 object storage
 │   └── client.py       # get_minio_client / get_object_storage / ObjectStorage / bucket_names / ensure_bucket
 └── users/              # user identity + JWT auth policy — owns auth.users
-    ├── models.py       # User (id, email, name, hashed_password, is_active, timestamps)
+    ├── models.py       # User (id, email, name, hashed_password, is_active, is_superuser, timestamps)
     ├── schemas.py      # UserCreate / UserRead / Token
-    ├── service.py      # create_user / authenticate_user / get_user_by_*
-    ├── dependencies.py # oauth2_scheme, get_current_user, get_current_active_user, CurrentUser
+    ├── service.py      # create_user / authenticate_user / get_user_by_* / ensure_admin_user
+    ├── dependencies.py # oauth2_scheme, get_current_user, get_current_active_user, get_current_superuser, CurrentUser, CurrentSuperuser
     └── api.py          # router: POST /auth/register, POST /auth/token, GET /auth/me
 ```
 
@@ -62,6 +62,10 @@ def list_plants(user: CurrentUser) -> ...:
 `POST /auth/token` takes an OAuth2 password form (`username` = email), so the
 **Authorize** button in `/docs` works. `main_web` mounts the `/auth` router
 alongside the health router.
+
+On startup `main_web` also calls `ensure_admin_user()`, which seeds (or
+reconciles) a superuser from the `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD`
+settings. Guard admin-only routes with `CurrentSuperuser` (403s non-admins).
 
 Until per-schema Alembic migrations land, `core.db.init_models()` creates the
 `auth` schema and its tables directly (used by tests; call it once for a local
