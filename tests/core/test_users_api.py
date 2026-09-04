@@ -30,6 +30,7 @@ def test_register_returns_user_without_password(client: TestClient) -> None:
     assert body["email"] == CREDS["email"]
     assert body["name"] == CREDS["name"]
     assert body["is_active"] is True
+    assert body["is_superuser"] is False
     assert "password" not in body
     assert "hashed_password" not in body
 
