@@ -19,6 +19,8 @@ from core.api import router as health_router
 from core.db import SessionLocal, init_models
 from core.users import ensure_admin_user
 from core.users import router as auth_router
+from knowledge import router as knowledge_router
+from knowledge.db import init_models as init_knowledge_models
 
 
 @asynccontextmanager
@@ -27,6 +29,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Alembic migrations land (see `core` README / the `migrate` service in
     # compose.yaml).
     init_models()
+    init_knowledge_models()
     # Seed / reconcile the bootstrap admin from ADMIN_* settings.
     with SessionLocal() as session:
         ensure_admin_user(session)
@@ -43,6 +46,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(knowledge_router)
 
     return app
 

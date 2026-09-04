@@ -66,3 +66,7 @@ python_version = "3.12"
 mypy_path = "src"
 files = ["src", "tests"]
 ignore_missing_imports = true
+# tests/ carries no __init__.py (so `tests/<ctx>` never shadows `src/<ctx>`);
+# this lets mypy tell the per-context conftest.py files apart all the same.
+explicit_package_bases = true
+namespace_packages = true
