@@ -18,14 +18,17 @@ from fastapi import FastAPI
 from core.api import router as health_router
 from core.db import init_models
 from core.users import router as auth_router
+from knowledge import router as knowledge_router
+from knowledge.db import init_models as init_knowledge_models
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    # Interim: create the `auth` schema + tables on startup until per-schema
-    # Alembic migrations land (see `core` README / the `migrate` service in
-    # compose.yaml).
+    # Interim: create each context's schema + tables (and views) on startup
+    # until per-schema Alembic migrations land (see the `core` README / the
+    # `migrate` service in compose.yaml).
     init_models()
+    init_knowledge_models()
     yield
 
 
@@ -39,6 +42,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(knowledge_router)
 
     return app
 
