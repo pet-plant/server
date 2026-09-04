@@ -25,11 +25,14 @@ from knowledge.db import init_models as init_knowledge_models
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    # Interim: create each context's schema + tables (and views) on startup
-    # until per-schema Alembic migrations land (see the `core` README / the
-    # `migrate` service in compose.yaml).
+    # Interim: create the `auth` schema + tables on startup until per-schema
+    # Alembic migrations land (see `core` README / the `migrate` service in
+    # compose.yaml).
     init_models()
     init_knowledge_models()
+    # Seed / reconcile the bootstrap admin from ADMIN_* settings.
+    with SessionLocal() as session:
+        ensure_admin_user(session)
     yield
 
 
