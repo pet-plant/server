@@ -2,6 +2,9 @@
 
 No HTTP concerns and no LLM logic here — this module only stores and reads what
 is already in the ``knowledge`` schema.
+
+Nothing is ever overwritten or deleted: superseding a research document or
+approving another probe set archives the row it replaces.
 """
 
 import uuid
@@ -10,10 +13,9 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from knowledge.db import metric_set_freshness, utcnow
-from knowledge.hashing import content_hash
-from knowledge.models import Metric, MetricSet, ResearchDocument, Species
-from knowledge.schemas import DocumentCreate, DocumentUpdate, SpeciesCreate
+from knowledge.db import probe_set_freshness, utcnow
+from knowledge.models import Probe, ProbeSet, ResearchDocument, Species
+from knowledge.schemas import DocumentCreate, SpeciesCreate
 
 
 class UnknownSpeciesError(Exception):
@@ -24,12 +26,8 @@ class SpeciesAlreadyExistsError(Exception):
     """Raised when registering a ``species_code`` that is already taken."""
 
 
-class DocumentInUseError(Exception):
-    """Raised when deleting a document that a metric set still references."""
-
-
-class MetricSetTransitionError(Exception):
-    """Raised for an illegal ``metric_set.status`` transition."""
+class ProbeSetTransitionError(Exception):
+    """Raised for an illegal ``probe_set.status`` transition."""
 
 
 # --------------------------------------------------------------------------- #
@@ -58,13 +56,37 @@ def list_species(session: Session) -> Sequence[Species]:
 
 
 # --------------------------------------------------------------------------- #
-# research_document CRUD
+# research_document (append-only)
 # --------------------------------------------------------------------------- #
 
 
+def get_active_document(
+    session: Session, species_code: str
+) -> ResearchDocument | None:
+    """The species' current research text, or ``None`` before the first one."""
+    return session.scalars(
+        select(ResearchDocument).where(
+            ResearchDocument.species_code == species_code,
+            ResearchDocument.status == "active",
+        )
+    ).one_or_none()
+
+
 def create_document(session: Session, data: DocumentCreate) -> ResearchDocument:
+    """Insert a new document and archive the one it supersedes.
+
+    Revising the research text means adding a row, never editing one: the probe
+    sets generated from the previous text keep pointing at it (and start showing
+    ``is_stale``).
+    """
     if session.get(Species, data.species_code) is None:
         raise UnknownSpeciesError(data.species_code)
+    previous = get_active_document(session, data.species_code)
+    if previous is not None:
+        previous.status = "archived"
+        previous.archived_at = utcnow()
+        # Free the "one active document per species" index before inserting.
+        session.flush()
     doc = ResearchDocument(
         species_code=data.species_code,
         title=data.title,
@@ -84,148 +106,134 @@ def get_document(session: Session, doc_id: uuid.UUID) -> ResearchDocument | None
 
 
 def list_documents(
-    session: Session, *, species_code: str | None = None
+    session: Session, *, species_code: str | None = None, status: str | None = None
 ) -> Sequence[ResearchDocument]:
     stmt = select(ResearchDocument).order_by(ResearchDocument.created_at.desc())
     if species_code is not None:
         stmt = stmt.where(ResearchDocument.species_code == species_code)
+    if status is not None:
+        stmt = stmt.where(ResearchDocument.status == status)
     return session.scalars(stmt).all()
 
 
-def update_document(
-    session: Session, doc: ResearchDocument, data: DocumentUpdate
-) -> ResearchDocument:
-    fields = data.model_dump(exclude_unset=True)
-    for key, value in fields.items():
-        setattr(doc, key, value)
-    if "body" in fields:
-        # Keep the hash honest so the freshness view flags affected metric sets.
-        doc.content_hash = content_hash(doc.body)
-    session.commit()
-    session.refresh(doc)
-    return doc
-
-
-def delete_document(session: Session, doc: ResearchDocument) -> None:
-    referenced = session.scalar(
-        select(func.count())
-        .select_from(MetricSet)
-        .where(MetricSet.research_document_id == doc.id)
-    )
-    if referenced:
-        raise DocumentInUseError(str(doc.id))
-    session.delete(doc)
-    session.commit()
-
-
 # --------------------------------------------------------------------------- #
-# metric inspection
+# probe inspection
 # --------------------------------------------------------------------------- #
 
-_METRIC_LOADERS = (
-    selectinload(MetricSet.metrics).selectinload(Metric.actions),
-    selectinload(MetricSet.metrics).selectinload(Metric.exemplars),
+_PROBE_LOADERS = (
+    selectinload(ProbeSet.probes).selectinload(Probe.actions),
+    selectinload(ProbeSet.probes).selectinload(Probe.exemplars),
 )
 
 
 def _staleness_map(session: Session) -> dict[uuid.UUID, bool]:
     rows = session.execute(
-        select(metric_set_freshness.c.metric_set_id, metric_set_freshness.c.is_stale)
+        select(probe_set_freshness.c.probe_set_id, probe_set_freshness.c.is_stale)
     )
-    return {mid: bool(stale) for mid, stale in rows}
+    return {sid: bool(stale) for sid, stale in rows}
 
 
-def _metric_counts(
+def _probe_counts(
     session: Session, set_ids: Sequence[uuid.UUID]
 ) -> dict[uuid.UUID, int]:
     if not set_ids:
         return {}
     rows = session.execute(
-        select(Metric.metric_set_id, func.count())
-        .where(Metric.metric_set_id.in_(set_ids))
-        .group_by(Metric.metric_set_id)
+        select(Probe.probe_set_id, func.count())
+        .where(Probe.probe_set_id.in_(set_ids))
+        .group_by(Probe.probe_set_id)
     )
     return {sid: count for sid, count in rows}
 
 
-def list_metric_sets(
+def list_probe_sets(
     session: Session, species_code: str
-) -> list[tuple[MetricSet, bool, int]]:
-    """All metric sets for a species, newest first, with staleness + metric count."""
+) -> list[tuple[ProbeSet, bool, int]]:
+    """All probe sets for a species, newest first, with staleness + probe count."""
     sets = list(
         session.scalars(
-            select(MetricSet)
-            .join(
-                ResearchDocument,
-                MetricSet.research_document_id == ResearchDocument.id,
-            )
-            .where(ResearchDocument.species_code == species_code)
-            .order_by(MetricSet.generated_at.desc())
+            select(ProbeSet)
+            .where(ProbeSet.species_code == species_code)
+            .order_by(ProbeSet.generated_at.desc())
         ).all()
     )
     stale = _staleness_map(session)
-    counts = _metric_counts(session, [s.id for s in sets])
+    counts = _probe_counts(session, [s.id for s in sets])
     return [(s, stale.get(s.id, False), counts.get(s.id, 0)) for s in sets]
 
 
-def get_metric_set(session: Session, set_id: uuid.UUID) -> MetricSet | None:
+def get_probe_set(session: Session, set_id: uuid.UUID) -> ProbeSet | None:
     return session.scalars(
-        select(MetricSet).where(MetricSet.id == set_id).options(*_METRIC_LOADERS)
+        select(ProbeSet).where(ProbeSet.id == set_id).options(*_PROBE_LOADERS)
     ).one_or_none()
 
 
-def get_current_metric_set(
-    session: Session, species_code: str, *, status: str = "approved"
-) -> MetricSet | None:
-    """The most recent metric set for a species in the given ``status``."""
+def get_approved_probe_set(
+    session: Session, species_code: str
+) -> ProbeSet | None:
+    """The species' single approved probe set, or ``None`` if it has none."""
     return session.scalars(
-        select(MetricSet)
-        .join(
-            ResearchDocument,
-            MetricSet.research_document_id == ResearchDocument.id,
-        )
+        select(ProbeSet)
         .where(
-            ResearchDocument.species_code == species_code,
-            MetricSet.status == status,
+            ProbeSet.species_code == species_code,
+            ProbeSet.status == "approved",
         )
-        .order_by(MetricSet.generated_at.desc())
-        .options(*_METRIC_LOADERS)
-        .limit(1)
+        .options(*_PROBE_LOADERS)
     ).one_or_none()
 
 
-def is_metric_set_stale(session: Session, set_id: uuid.UUID) -> bool:
+def is_probe_set_stale(session: Session, set_id: uuid.UUID) -> bool:
     return _staleness_map(session).get(set_id, False)
 
 
 # --------------------------------------------------------------------------- #
-# metric_set status transitions
+# probe_set status transitions
 # --------------------------------------------------------------------------- #
 
 
-def approve_metric_set(
-    session: Session, metric_set: MetricSet, *, approved_by: str
-) -> MetricSet:
-    if metric_set.status != "draft":
-        raise MetricSetTransitionError(
-            f"cannot approve a {metric_set.status} metric set"
+def approve_probe_set(
+    session: Session, probe_set: ProbeSet, *, approved_by: str
+) -> ProbeSet:
+    """Make ``probe_set`` the species' approved set, archiving the incumbent.
+
+    Works from ``draft`` (a fresh generation run) and from ``archived`` (swapping
+    an older set back in). Approval is exclusive per species — a partial unique
+    index backs this up in the database.
+    """
+    if probe_set.status == "approved":
+        raise ProbeSetTransitionError("probe set is already approved")
+    if probe_set.status not in ("draft", "archived"):
+        raise ProbeSetTransitionError(
+            f"cannot approve a {probe_set.status} probe set"
         )
-    if not metric_set.metrics:
-        raise MetricSetTransitionError("cannot approve a metric set with no metrics")
-    metric_set.status = "approved"
-    metric_set.approved_by = approved_by
-    metric_set.approved_at = utcnow()
+    if not probe_set.probes:
+        raise ProbeSetTransitionError("cannot approve a probe set with no probes")
+
+    now = utcnow()
+    incumbent = get_approved_probe_set(session, probe_set.species_code)
+    if incumbent is not None:
+        incumbent.status = "archived"
+        incumbent.archived_at = now
+        # Free the "one approved set per species" index before promoting.
+        session.flush()
+
+    probe_set.status = "approved"
+    probe_set.approved_by = approved_by
+    probe_set.approved_at = now
+    probe_set.archived_at = None
     session.commit()
-    session.refresh(metric_set)
-    return metric_set
+    session.refresh(probe_set)
+    return probe_set
 
 
-def archive_metric_set(session: Session, metric_set: MetricSet) -> MetricSet:
-    if metric_set.status != "approved":
-        raise MetricSetTransitionError(
-            f"cannot archive a {metric_set.status} metric set"
+def archive_probe_set(session: Session, probe_set: ProbeSet) -> ProbeSet:
+    """Retire the approved set, leaving the species with none until re-approval."""
+    if probe_set.status != "approved":
+        raise ProbeSetTransitionError(
+            f"cannot archive a {probe_set.status} probe set"
         )
-    metric_set.status = "archived"
+    probe_set.status = "archived"
+    probe_set.archived_at = utcnow()
     session.commit()
-    session.refresh(metric_set)
-    return metric_set
+    session.refresh(probe_set)
+    return probe_set
