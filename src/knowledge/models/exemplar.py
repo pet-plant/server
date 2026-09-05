@@ -1,4 +1,4 @@
-"""``metric_exemplar`` — pointers to few-shot exemplar images.
+"""``probe_exemplar`` — pointers to few-shot exemplar images.
 
 The image bytes live in the ``exemplars`` MinIO bucket; this row holds the
 object key plus the label the model is shown alongside the image.
@@ -14,16 +14,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from knowledge.db import KNOWLEDGE_SCHEMA, Base, JsonB, utcnow
 
 if TYPE_CHECKING:
-    from knowledge.models.metric import Metric
+    from knowledge.models.probe import Probe
 
 
-class MetricExemplar(Base):
-    __tablename__ = "metric_exemplar"
+class ProbeExemplar(Base):
+    __tablename__ = "probe_exemplar"
     __table_args__ = {"schema": KNOWLEDGE_SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    metric_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey(f"{KNOWLEDGE_SCHEMA}.metric.id"), nullable=False
+    probe_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey(f"{KNOWLEDGE_SCHEMA}.probe.id"), nullable=False
     )
     role: Mapped[str] = mapped_column(Text, nullable=False)  # 'worse_severe' | 'better' …
     # Object key inside the ``exemplars`` bucket.
@@ -38,7 +38,7 @@ class MetricExemplar(Base):
         DateTime(timezone=True), default=utcnow, nullable=False
     )
 
-    metric: Mapped["Metric"] = relationship(back_populates="exemplars")
+    probe: Mapped["Probe"] = relationship(back_populates="exemplars")
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
-        return f"<MetricExemplar {self.role!r} {self.storage_key!r}>"
+        return f"<ProbeExemplar {self.role!r} {self.storage_key!r}>"

@@ -7,23 +7,27 @@ Chain of ownership::
 
     species
       └── research_document      human-written research text (the LLM input)
-            └── metric_set       one LLM generation run (+ human approval)
-                  └── metric     one single-question probe
-                        ├── metric_action     what to do when it fires
-                        └── metric_exemplar   few-shot image (bytes in MinIO)
+            └── probe_set        one LLM generation run (+ human approval)
+                  └── probe      one single-question probe
+                        ├── probe_action     what to do when it fires
+                        └── probe_exemplar   few-shot image (bytes in MinIO)
+
+``research_document`` and ``probe_set`` are both append-only with an
+``active`` / ``approved`` singleton per species: superseding one archives the
+row it replaces instead of overwriting or deleting it.
 """
 
-from knowledge.models.action import MetricAction
+from knowledge.models.action import ProbeAction
 from knowledge.models.document import ResearchDocument
-from knowledge.models.exemplar import MetricExemplar
-from knowledge.models.metric import Metric, MetricSet
+from knowledge.models.exemplar import ProbeExemplar
+from knowledge.models.probe import Probe, ProbeSet
 from knowledge.models.species import Species
 
 __all__ = [
-    "Metric",
-    "MetricAction",
-    "MetricExemplar",
-    "MetricSet",
+    "Probe",
+    "ProbeAction",
+    "ProbeExemplar",
+    "ProbeSet",
     "ResearchDocument",
     "Species",
 ]

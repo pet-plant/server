@@ -7,7 +7,7 @@ schema's table metadata stays context-local) and sets
 
 The engine and connection pool come from :mod:`core.db`; only the metadata is
 local here. Until per-schema Alembic migrations land, :func:`init_models` creates
-the schema, its tables and the ``metric_set_freshness`` view directly — enough
+the schema, its tables and the ``probe_set_freshness`` view directly — enough
 for local runs and tests.
 """
 
@@ -55,35 +55,31 @@ class Base(DeclarativeBase):
     """Declarative base for tables owned by the ``knowledge`` context."""
 
 
-# A metric set is "stale" when the hash it was generated from no longer matches
-# the current research document for that species (the newest ``created_at`` row).
+# A probe set is "stale" when the hash it was generated from no longer matches
+# the current research document for that species (its ``active`` row).
 # See the ``knowledge`` README.
 _FRESHNESS_VIEW_SQL = """
-CREATE VIEW {prefix}metric_set_freshness AS
+CREATE VIEW {prefix}probe_set_freshness AS
 SELECT
-    ms.id                  AS metric_set_id,
-    ms.research_document_id,
-    ms.status,
-    ms.source_content_hash,
+    ps.id                  AS probe_set_id,
+    ps.research_document_id,
+    ps.species_code,
+    ps.status,
+    ps.source_content_hash,
     cur.id                 AS current_document_id,
     cur.content_hash       AS current_content_hash,
-    CASE WHEN ms.source_content_hash <> cur.content_hash THEN 1 ELSE 0 END AS is_stale
-FROM {prefix}metric_set ms
-JOIN {prefix}research_document used ON used.id = ms.research_document_id
+    CASE WHEN ps.source_content_hash <> cur.content_hash THEN 1 ELSE 0 END AS is_stale
+FROM {prefix}probe_set ps
 JOIN {prefix}research_document cur
-      ON cur.species_code = used.species_code
-     AND cur.created_at = (
-         SELECT MAX(d.created_at)
-         FROM {prefix}research_document d
-         WHERE d.species_code = used.species_code
-     )
+      ON cur.species_code = ps.species_code
+     AND cur.status = 'active'
 """
 
 
 def create_views(conn: Connection) -> None:
     """(Re)create the ``knowledge`` SQL views on an open connection."""
     prefix = f"{KNOWLEDGE_SCHEMA}." if conn.dialect.name == "postgresql" else ""
-    conn.execute(text(f"DROP VIEW IF EXISTS {prefix}metric_set_freshness"))
+    conn.execute(text(f"DROP VIEW IF EXISTS {prefix}probe_set_freshness"))
     conn.execute(text(_FRESHNESS_VIEW_SQL.format(prefix=prefix)))
 
 
@@ -91,11 +87,12 @@ def create_views(conn: Connection) -> None:
 # its own MetaData so ``Base.metadata.create_all`` never tries to build it as a
 # table; schema translation still applies on SQLite via the engine options.
 _views_metadata = MetaData()
-metric_set_freshness = Table(
-    "metric_set_freshness",
+probe_set_freshness = Table(
+    "probe_set_freshness",
     _views_metadata,
-    Column("metric_set_id", Uuid, primary_key=True),
+    Column("probe_set_id", Uuid, primary_key=True),
     Column("research_document_id", Uuid),
+    Column("species_code", Text),
     Column("status", Text),
     Column("source_content_hash", Text),
     Column("current_document_id", Uuid),

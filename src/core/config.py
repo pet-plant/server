@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     admin_name: str
     admin_password: str
 
+    # --- ClearML (self-hosted; used by the mlops context) ---
+    clearml_api_host: str = ""
+    clearml_web_host: str = ""
+    clearml_files_host: str = ""
+    clearml_api_access_key: str = ""
+    clearml_api_secret_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

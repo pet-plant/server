@@ -1,7 +1,7 @@
 """Request / response models for the ``knowledge`` HTTP API and the published
 in-process interface.
 
-The read models mirror the ORM rows; :class:`SpeciesMetricsBundle` is the shape
+The read models mirror the ORM rows; :class:`SpeciesProbesBundle` is the shape
 other contexts (``assessment``, ``advice``) consume as JSON.
 """
 
@@ -44,16 +44,6 @@ class DocumentCreate(BaseModel):
     source_note: str | None = None
 
 
-class DocumentUpdate(BaseModel):
-    """Every field optional — only what is sent is changed."""
-
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    body: str | None = Field(default=None, min_length=1)
-    author: str | None = Field(default=None, min_length=1, max_length=120)
-    source_url: str | None = None
-    source_note: str | None = None
-
-
 class DocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,11 +55,13 @@ class DocumentRead(BaseModel):
     author: str
     source_url: str | None
     source_note: str | None
+    status: str  # 'active' | 'archived'
     created_at: datetime
+    archived_at: datetime | None
 
 
 # --------------------------------------------------------------------------- #
-# metrics
+# probes
 # --------------------------------------------------------------------------- #
 
 
@@ -98,7 +90,7 @@ class ExemplarRead(BaseModel):
     caption: str | None
 
 
-class MetricRead(BaseModel):
+class ProbeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -116,29 +108,31 @@ class MetricRead(BaseModel):
     exemplars: list[ExemplarRead]
 
 
-class MetricSetSummary(BaseModel):
+class ProbeSetSummary(BaseModel):
     id: uuid.UUID
+    species_code: str
     research_document_id: uuid.UUID
     llm_model: str
     prompt_version: str | None
-    status: str
+    status: str  # 'draft' | 'approved' | 'archived'
     generated_at: datetime
     approved_by: str | None
     approved_at: datetime | None
+    archived_at: datetime | None
     is_stale: bool
-    metric_count: int
+    probe_count: int
 
 
-class MetricSetDetail(MetricSetSummary):
-    metrics: list[MetricRead]
+class ProbeSetDetail(ProbeSetSummary):
+    probes: list[ProbeRead]
 
 
-class SpeciesMetricsBundle(BaseModel):
-    """Published payload: the current metrics + actions for one species."""
+class SpeciesProbesBundle(BaseModel):
+    """Published payload: the approved probes + actions for one species."""
 
     species_code: str
-    metric_set_id: uuid.UUID
+    probe_set_id: uuid.UUID
     status: str
     is_stale: bool
     generated_at: datetime
-    metrics: list[MetricRead]
+    probes: list[ProbeRead]

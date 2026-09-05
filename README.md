@@ -53,7 +53,7 @@ edge camera ──uploads frames──▶ orchestrator (event bus) ──routes�
 |---|---------|---------|------|------------------------|--------------|
 | 1 | Plant Registry | `src/registry` | Identity & physical anchoring — plants, owners, species assignment, camera placement | `registry` | — |
 | 2 | Capture & Vision | `src/capture` | Visual data extraction — receive capture batches, quality-check, segment, register/align frames | `vision` | `captures`, `frames-derived` |
-| 3 | Species & Care Knowledge | `src/knowledge` | Botanical knowledge base — care needs, probe / metric-script authoring, versioned script bundles | `knowledge` | `exemplars` |
+| 3 | Species & Care Knowledge | `src/knowledge` | Botanical knowledge base — care needs, probe authoring (approved probe set per species), versioned probe bundles | `knowledge` | `exemplars` |
 | 4 | Assessment | `src/assessment` | Internal-state inference — run probes on the VLM, aggregate N runs into verdict + severity + evidence + agreement | `assessment` | — |
 | 5 | Care Advice | `src/advice` | Interpretable reasoning — turn verdicts + history into a diagnosis, ranked actions, rationale and citations (external LLM, retrieval-grounded) | `advice` | — |
 | 6 | Companion | `src/companion` | Ambient UI & persona — map internal state to moods / expressions / utterances, run the interaction loop, process care acknowledgements | `companion` | — |
@@ -134,7 +134,7 @@ dispatcher, not a long-lived scheduler: an external scheduler (cron, a systemd
 timer, or a ClearML Agent) calls it with the job to run. Jobs include, among
 others: draining pending capture batches through segmentation and alignment,
 running the screening probe and probe battery, refreshing offline-generated
-metric-script bundles, and executing an evaluate-and-promote cycle against the
+probe bundles, and executing an evaluate-and-promote cycle against the
 frozen evaluation set. The concrete job catalogue is owned by `orchestrator`.
 
 ---
@@ -221,7 +221,7 @@ cannot reach another household's data.
 
 **Hard boundary:** no plant imagery is ever transmitted to a third-party service.
 Segmentation and the VLM run on infrastructure this project controls. Only the
-`advice` context and the offline metric-script generation in `knowledge` call an
+`advice` context and the offline probe generation in `knowledge` call an
 external LLM, and they send text (verdicts, severities, evidence, history) — never
 images.
 
@@ -237,7 +237,7 @@ contexts reach it over the network using values from `.env`.
 |---------|---------|-----------|---------|
 | VLM (probe execution, species ID) | On-prem, served with **vLLM** | OpenAI-compatible HTTP API (`VLM_API_BASE`) | assessment, registry |
 | Segmentation model | On-prem | HTTP API (`SEGMENTATION_ENDPOINT`) | capture |
-| LLM (advice, metric-script generation) | External API, text only | HTTP API (`LLM_API_BASE`) | advice, knowledge |
+| LLM (advice, probe generation) | External API, text only | HTTP API (`LLM_API_BASE`) | advice, knowledge |
 | ClearML (Tasks, Data, Model Registry) | Self-hosted | ClearML SDK / REST | mlops |
 
 ---
