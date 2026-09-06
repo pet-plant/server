@@ -1,80 +1,99 @@
-# `mlops` — Evaluation & MLOps (context 7)
+# `mlops` — LLM execution and experiments
 
-AI quality assurance: ClearML is the authoring / experimentation / comparison
-store for the prompts and configs the AI contexts run on; this context evaluates
-candidates, gates them, and ships approved ones to their consuming context.
+Every VLM / LLM call in the system goes through here, and so does every
+experiment behind those calls. **Langfuse** manages the prompts.
 
-> Status: **template scaffolding only.** Every function body is
-> `raise NotImplementedError` / every endpoint returns `501`. The concrete logic
-> and the runtime hand-off mechanism are not decided yet.
+> Status: **templates only.** Function bodies are `raise NotImplementedError`
+> and the per-component contents are placeholders for their owners to fill in.
+> The `langfuse` / `openai` dependencies are not in `pyproject.toml` yet.
 
-## Managed artifacts (bundle kinds)
+## Not a bounded context
 
-Each is versioned as a **bundle** — a self-contained payload (prompt text and/or
-structured config) plus metadata. One `BundleSpec` per kind in `bundles/`.
-
-| `BundleKind` | Payload | Consumer |
-|---|---|---|
-| `assessment_vlm_prompt` | VLM probe prompt template + decoding | `assessment` |
-| `advice_llm_prompt` | advice LLM prompt template(s) + decoding | `advice` |
-| `advice_agent` | agent structure as data (nodes / tools / edges / model) | `advice` |
-| `knowledge_probe_prompt` | probe-generation prompt + output contract | `knowledge` |
-
-Add a kind: new `BundleKind` member → new `bundles/<kind>.py` with its `*Spec` →
-register in `bundles.BUNDLE_SPECS` → add `settings.CLEARML_SUBPROJECT` entry.
-
-## Flow
+`mlops` owns no Postgres schema and no HTTP router. It is a shared library
+alongside `core` that the LLM-using contexts depend on:
 
 ```
-author in ClearML ──▶ pull candidate ──▶ evaluate vs frozen eval set ──▶ compare
-   (tracking/)         (tracking/         (evaluation/runner +            (evaluation/
-                        bundle_store)      evaluation/metrics)             compare)
-                                                                             │
-                                                            promotion gates  ▼
-                                                            (promotion/gates)
-                                                                             │
-                                                    freeze + hand off  ──────▼
-                                                    (promotion/ship)   shipped bundle
-                                                                             │
-                              consuming context reads it ◀── mlops.interface.get_active_bundle
+assessment ─┐
+advice     ─┼─▶ mlops ─┬─▶ Langfuse  (prompts / traces / datasets / scores)
+knowledge  ─┤          └─▶ VLM (on-prem, vLLM) · LLM (external, text only)
+registry   ─┘
 ```
 
-Scores and comparisons are mirrored into ClearML (`tracking/experiment.py`) so
-the ClearML compare view is the human-facing "検証と比較" surface.
+**The dependency is one-way.** `mlops` never imports a bounded context — its
+entry points take plain values and dataclasses defined here, and the calling
+context maps its own models onto them (e.g. `assessment` flattens a
+`knowledge.schemas.ProbeRead` into an `mlops.assessment.ProbeInput`). Without
+this rule `knowledge → mlops → knowledge` closes a cycle.
 
-## Layout
+## One package per component, one owner each
 
-| Path | Responsibility |
+Each component is **its own Langfuse project** with its own key pair, and each
+package is **self-contained**: it decides how it handles prompts, calls its
+model, traces and scores. There is deliberately no shared abstraction layer over
+Langfuse — the four owners can work in parallel without agreeing on one, and
+without a change to shared code rippling across all four.
+
+| Package | Model | Entry point the context calls | Owner |
+|---|---|---|---|
+| `mlops/assessment/` | VLM | `run_probe(ProbeInput) -> ProbeVerdict` | TODO |
+| `mlops/advice/` | LLM | `generate_advice(AdviceInput) -> AdviceResult` | TODO |
+| `mlops/knowledge/` | LLM | `generate_probes(...) -> GenerateProbesResult` | TODO |
+| `mlops/registry/` | VLM | `identify_species(...) -> SpeciesGuess` | TODO |
+
+### The template inside each package
+
+| File | Holds |
 |---|---|
-| `bundles/` | one module per managed artifact — payload model + `BundleSpec` (validate / render / fingerprint) |
-| `tracking/` | **the only place `import clearml` appears** — session, candidate push/pull, experiment logging |
-| `evaluation/` | frozen eval sets, run a candidate, score, champion/challenger compare |
-| `promotion/` | promotion gates + `ship.py` (freeze + hand-off seam) |
-| `models/` | `mlops` Postgres schema: `bundle_version`, `eval_run` / `eval_result`, `promotion_record` |
-| `jobs/` | worker entrypoints (`run_evaluation`, `sync_bundles`), dispatched from `main_worker.py` |
-| `api.py` | `/mlops` router — list / trigger eval / inspect / promote |
-| `interface.py` | in-process `get_active_bundle(kind, target=…)` for other contexts |
-| `service.py` | persistence / read queries over the `mlops` schema |
-| `db.py` | schema wiring (mirrors `knowledge/db.py`) |
-| `settings.py` | ClearML project layout constants; `SHIP_TARGET` (TBD) |
+| `prompts.py` | The prompt names in that Langfuse project, and how to fetch a version. One place, so `runtime` and `experiment` agree |
+| `runtime.py` | **Execution code.** Resolve the `production` prompt → call the model → parse → trace. Takes `label` / `version` / `overrides` so experiments can drive it |
+| `experiment.py` | **Experiment code.** Runs `runtime`'s function over a Langfuse dataset as a dataset run. `python -m mlops.<component>.experiment` |
+| `evaluators.py` | That component's scorers |
+
+Add modules beyond these as the work needs them — an agent graph, a parser, a
+retry policy. That is the owner's call.
+
+**`experiment.py` calls `runtime.py`'s own function**, with a pinned prompt
+version rather than the `production` label. Experiments and production therefore
+share one code path, so a prompt that scored well cannot behave differently once
+its label moves. This is why every `runtime` entry point takes `label` /
+`version` / `overrides` — keep that shape.
+
+## What is shared (and it is only this)
+
+| Module | Holds |
+|---|---|
+| `settings.py` | `Component(StrEnum)` — subpackage, Langfuse project and key pair keyed by one value — plus `PRODUCTION_LABEL` and `credentials_for()` |
+| `client.py` | `get_client(component)` — a Langfuse client pointed at the right project. Credential plumbing, not an abstraction over the SDK |
+
+## How prompts are managed
+
+Everything an in-house prompt registry would carry lives in Langfuse instead:
+
+| Concern | Where it lives |
+|---|---|
+| Prompt text | Langfuse prompt version |
+| Hyper-parameters (model, temperature, …) | That version's `config` JSON |
+| Version identity | Langfuse version number |
+| What is live | The `production` label |
+| Promotion / rollback | Moving that label — old versions are never deleted |
+| Eval set / run / scores | Langfuse Dataset / Dataset Run / Scores |
+
+The request path resolves by **label**; experiments pin a **version**.
+
+**No experiment data is written to Postgres.** If a context later needs to
+correlate its own rows with a trace, the minimal move is one `langfuse_trace_id`
+column on that context's table — every `runtime` result carries the id for
+exactly this.
 
 ## Config
 
-`CLEARML_*` values come from `core.config.Settings` (declared in `.env.example`).
-The `clearml` SDK dependency is not in `pyproject.toml` yet — add it when
-`tracking/` gets its first real implementation.
+`LANGFUSE_HOST` plus a public/secret key pair per component, declared in
+`core.config.Settings` and `.env.example`. `VLM_*` / `LLM_*` supply the model
+endpoints.
 
-## Open decisions
+## Adding a component
 
-- **Runtime hand-off** — how a consuming context receives the shipped bundle:
-  in-process pull via `mlops.interface` (ClearML off the request path), publish to
-  MinIO, or a direct ClearML pull. `settings.SHIP_TARGET` selects it.
-- Whether draft candidates live only in ClearML or also as `bundle_version` rows
-  from creation (`service.record_candidate` currently assumes the latter).
-- Per-kind scorers, gates, and eval-set formats.
-
-## Wiring left to do
-
-- `main_web.py` lifespan: call `mlops.db.init_models()`; `app.include_router(mlops.router)`.
-- `main_worker.py`: dispatch `mlops.jobs.*`.
-- `tests/mlops/conftest.py`: in-memory SQLite wiring (copy `tests/knowledge/conftest.py`).
+1. Add a member to `Component` in `settings.py`.
+2. Add its key pair to `core.config.Settings` and `.env.example`.
+3. Register it in `settings.credentials_for()`.
+4. Copy an existing component package as the template.
