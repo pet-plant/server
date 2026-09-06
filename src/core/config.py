@@ -52,12 +52,19 @@ class Settings(BaseSettings):
     admin_name: str
     admin_password: str
 
-    # --- ClearML (self-hosted; used by the mlops context) ---
-    clearml_api_host: str = ""
-    clearml_web_host: str = ""
-    clearml_files_host: str = ""
-    clearml_api_access_key: str = ""
-    clearml_api_secret_key: str = ""
+    # --- Langfuse (prompt management, tracing, datasets; used by `mlops`) ---
+    # Langfuse is split by project, one per LLM-using component, so there is a
+    # key pair per component rather than one for the server. Resolved by
+    # `mlops.settings.credentials_for`.
+    langfuse_host: str = ""
+    langfuse_assessment_public_key: str = ""
+    langfuse_assessment_secret_key: str = ""
+    langfuse_advice_public_key: str = ""
+    langfuse_advice_secret_key: str = ""
+    langfuse_knowledge_public_key: str = ""
+    langfuse_knowledge_secret_key: str = ""
+    langfuse_registry_public_key: str = ""
+    langfuse_registry_secret_key: str = ""
 
 
 @lru_cache

@@ -1,33 +1,36 @@
-"""Evaluation & MLOps (context 7).
+"""MLOps — every VLM / LLM call in the system, and the experiments behind them.
 
-ClearML is the authoring / experimentation / comparison store for a small set of
-*managed artifacts* — prompts and structured configs the AI contexts run on:
+Not a bounded context: ``mlops`` owns no Postgres schema and no HTTP surface. It
+is a shared library, alongside ``core``, that the LLM-using contexts depend on::
 
-- the ``assessment`` VLM probe prompt,
-- the ``advice`` LLM prompt,
-- the ``advice`` agent structure,
-- the ``knowledge`` probe-generation LLM prompt,
-- ...more kinds are added over time (see :mod:`mlops.bundles`).
+    assessment ─┐
+    advice     ─┼─▶ mlops ─┬─▶ Langfuse  (prompts / traces / datasets / scores)
+    knowledge  ─┤          └─▶ VLM (on-prem, vLLM) · LLM (external, text only)
+    registry   ─┘
 
-Each is versioned as a *bundle*. The flow is: author a candidate in ClearML →
-:mod:`mlops.evaluation` validates and compares it against the current champion →
-:mod:`mlops.promotion` gates it and freezes an approved bundle to a *shipped*
-state → the consuming context reads the shipped bundle through
-:mod:`mlops.interface`.
+**Langfuse manages the prompts**, including their versions, the ``production``
+label that decides which version is live, and the ``config`` blob holding each
+prompt's hyper-parameters. Nothing about a prompt is stored in this repository
+and nothing is written to Postgres — promotion is moving a label in Langfuse.
 
-Owns the ``mlops`` Postgres schema and the ``eval-sets`` MinIO bucket; reads
-``exemplars``.
+**One package per component**, each a separate Langfuse project with its own key
+pair, and each with its own owner. A package is self-contained — it decides how
+it handles prompts, calls models, traces and scores — so the four owners do not
+have to agree on an abstraction to work in parallel. The only thing shared is
+which credentials belong to which component (:mod:`mlops.settings`,
+:mod:`mlops.client`).
 
-Public surface:
+A context imports only its own package::
 
-- :data:`router` — the ``/mlops`` endpoints, mounted by ``main_web`` (once wired).
-- :func:`get_active_bundle` — in-process interface: ``kind`` → the currently
-  shipped bundle payload, for ``assessment`` / ``advice`` / ``knowledge``.
+    from mlops.assessment import ProbeInput, run_probe
 
-Nothing here is implemented yet — this package is template scaffolding.
+**The dependency is one-way.** ``mlops`` never imports a bounded context, so its
+entry points take plain values and dataclasses defined here; the calling context
+maps its own models onto them.
+
+Nothing is implemented yet — this package is template scaffolding.
 """
 
-from mlops.api import router
-from mlops.interface import get_active_bundle
+from mlops.settings import Component
 
-__all__ = ["get_active_bundle", "router"]
+__all__ = ["Component"]

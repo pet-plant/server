@@ -44,7 +44,7 @@ edge camera ──uploads frames──▶ orchestrator (event bus) ──routes�
                                                     diagnosis & actions ─▶ companion
                                                        mood + utterances ─▶ orchestrator ──▶ edge display
 
-        mlops ──validates──▶ assessment (VLM) and advice (LLM), gates bundle promotion
+        mlops ──runs every VLM / LLM call above, and the experiments behind them
 ```
 
 ### Bounded contexts
@@ -57,7 +57,7 @@ edge camera ──uploads frames──▶ orchestrator (event bus) ──routes�
 | 4 | Assessment | `src/assessment` | Internal-state inference — run probes on the VLM, aggregate N runs into verdict + severity + evidence + agreement | `assessment` | — |
 | 5 | Care Advice | `src/advice` | Interpretable reasoning — turn verdicts + history into a diagnosis, ranked actions, rationale and citations (external LLM, retrieval-grounded) | `advice` | — |
 | 6 | Companion | `src/companion` | Ambient UI & persona — map internal state to moods / expressions / utterances, run the interaction loop, process care acknowledgements | `companion` | — |
-| 7 | Evaluation & MLOps | `src/mlops` | AI quality assurance — frozen evaluation sets, evaluation runs, promotion gates, bundle versioning (ClearML) | `mlops` | `eval-sets`, `exemplars` (read) |
+| 7 | MLOps | `src/mlops` | **Not a bounded context — a shared library.** Every VLM / LLM call in the system, plus the prompt management, tracing and offline experiments behind them (Langfuse). One subpackage per LLM-using component | — (none: Langfuse holds it) | `eval-sets`, `exemplars` (read) |
 | 8 | System Integration & Infrastructure | `src/orchestrator` + `src/core` | End-to-end orchestration & operations — event routing, batch workflow, device sync (`orchestrator`); cross-cutting infrastructure (`core`) | `orchestrator` (event outbox / job runs / device sync), `auth` (`core`) | — |
 
 **HTTP surface.** `main_web` builds the FastAPI app: it mounts `core`'s health
@@ -100,7 +100,7 @@ pet-plant-server/
     ├── assessment/           # 4. Assessment (VLM probe execution)
     ├── advice/               # 5. Care Advice (external LLM)
     ├── companion/            # 6. Companion (persona / ambient-UI backend)
-    └── mlops/                # 7. Evaluation & MLOps (ClearML)
+    └── mlops/                # 7. MLOps — all VLM/LLM calls + experiments (Langfuse)
 ```
 
 Every context that exposes HTTP puts its routes in `src/<context>/api.py`
@@ -130,12 +130,12 @@ internal operations endpoints. Run under `uvicorn`.
 ### `src/main_worker.py` — worker
 
 Runs the batch job that is due **at the moment it is invoked**. It is a
-dispatcher, not a long-lived scheduler: an external scheduler (cron, a systemd
-timer, or a ClearML Agent) calls it with the job to run. Jobs include, among
-others: draining pending capture batches through segmentation and alignment,
-running the screening probe and probe battery, refreshing offline-generated
-probe bundles, and executing an evaluate-and-promote cycle against the
-frozen evaluation set. The concrete job catalogue is owned by `orchestrator`.
+dispatcher, not a long-lived scheduler: an external scheduler (cron or a systemd
+timer) calls it with the job to run. Jobs include, among others: draining pending
+capture batches through segmentation and alignment, and running the screening
+probe and probe battery. The concrete job catalogue is owned by `orchestrator`.
+Prompt experiments are not jobs — they are run on demand with
+`python -m mlops.<component>.experiment`.
 
 ---
 
@@ -150,7 +150,7 @@ frozen evaluation set. The concrete job catalogue is owned by `orchestrator`.
 | Validation / models | **Pydantic** | fixed |
 | Relational store | **PostgreSQL** | one instance, one schema per context |
 | Object store | **MinIO** | S3-compatible; frames, derived crops, exemplars, evaluation sets |
-| LLMOps | **ClearML** (self-hosted) | Tasks, ClearML-Data, Model Registry — see context 7 |
+| LLMOps | **Langfuse** (self-hosted) | Prompt management, tracing, datasets, scores — see `src/mlops` |
 
 Beyond FastAPI / SQLAlchemy / Pydantic, additional libraries are each context's
 own choice.
@@ -162,8 +162,9 @@ own choice.
 ### PostgreSQL — schema per context
 
 A single PostgreSQL instance holds one schema per context (`registry`, `vision`,
-`knowledge`, `assessment`, `advice`, `companion`, `mlops`, `orchestrator`) plus an
-`auth` schema owned by `core`. A context reads and writes **only its own
+`knowledge`, `assessment`, `advice`, `companion`, `orchestrator`) plus an
+`auth` schema owned by `core`. `mlops` has no schema — Langfuse holds its
+prompts, traces, datasets and scores. A context reads and writes **only its own
 schema**. Cross-context data is obtained through the owning context's published
 interface, never by querying another schema or joining across schemas. Migrations
 are per-schema and owned by each context; `core` provides the migration
@@ -178,7 +179,7 @@ Indicative bucket layout (exact names/prefixes finalised by the owning contexts)
 | `captures` | capture | Raw uploaded frames / capture batches |
 | `frames-derived` | capture | Segmented crops, aligned and composited canvases |
 | `exemplars` | knowledge / mlops | Versioned few-shot exemplar images |
-| `eval-sets` | mlops | Frozen labelled evaluation image pairs |
+| `eval-sets` | mlops | Images referenced by Langfuse dataset items (dataset item JSON lives in Langfuse) |
 
 Retention: captures are kept in our own store so owner corrections become new
 evaluation cases and candidate exemplars.
@@ -235,10 +236,10 @@ contexts reach it over the network using values from `.env`.
 
 | Service | Hosting | Interface | Used by |
 |---------|---------|-----------|---------|
-| VLM (probe execution, species ID) | On-prem, served with **vLLM** | OpenAI-compatible HTTP API (`VLM_API_BASE`) | assessment, registry |
+| VLM (probe execution, species ID) | On-prem, served with **vLLM** | OpenAI-compatible HTTP API (`VLM_API_BASE`) | `mlops` (for assessment, registry) |
 | Segmentation model | On-prem | HTTP API (`SEGMENTATION_ENDPOINT`) | capture |
-| LLM (advice, probe generation) | External API, text only | HTTP API (`LLM_API_BASE`) | advice, knowledge |
-| ClearML (Tasks, Data, Model Registry) | Self-hosted | ClearML SDK / REST | mlops |
+| LLM (advice, probe generation) | External API, text only | HTTP API (`LLM_API_BASE`) | `mlops` (for advice, knowledge) |
+| Langfuse (prompts, traces, datasets, scores) | Self-hosted | Langfuse SDK | `mlops` — one project **per component**, so one key pair each |
 
 ---
 
@@ -284,7 +285,8 @@ uv run uvicorn main_web:app --app-dir src --reload
 - How each context organises its HTTP routes and request/response schemas — only
   the entry point is fixed: `src/<context>/api.py` exposing `router: APIRouter`.
 - Libraries beyond the fixed baseline in `pyproject.toml` — each context adds its
-  own (segmentation / VLM / LLM / ClearML clients, etc.).
+  own (segmentation clients, etc.). VLM / LLM / Langfuse clients are **not** among
+  them: those live once in `src/mlops`, and contexts call into it.
 - Concrete event names, job names and interface signatures — defined by the
   owning contexts as work begins.
 - Whether individual pipeline hand-offs are synchronous calls or events.
