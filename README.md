@@ -151,9 +151,11 @@ Prompt experiments are not jobs — they are run on demand with
 | Relational store | **PostgreSQL** | one instance, one schema per context |
 | Object store | **MinIO** | S3-compatible; frames, derived crops, exemplars, evaluation sets |
 | LLMOps | **Langfuse** (self-hosted) | Prompt management, tracing, datasets, scores — see `src/mlops` |
+| LLM framework | **LangChain** (+ `langchain-openai`) | Chains / agents; v1 bundles `langgraph`. Used only inside `src/mlops` |
 
 Beyond FastAPI / SQLAlchemy / Pydantic, additional libraries are each context's
-own choice.
+own choice — except the AI stack, which is pinned because it lives once in
+`src/mlops` and every LLM-using context calls into it.
 
 ---
 

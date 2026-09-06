@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "Cloud backend for Pet-Plant: VLM-based plant-health assessment with a character-mediated interface"
 requires-python = ">=3.12"
 
-# Fixed baseline only. Each bounded context adds the libraries it needs
-# (segmentation / VLM / LLM / ClearML clients, etc.) — those are not pinned here.
+# Fixed baseline. Each bounded context adds the libraries it needs on top
+# (a segmentation client, etc.) — those are not pinned here. The AI stack is the
+# exception: it is pinned below because it lives once, in `src/mlops`, and every
+# LLM-using context calls into that rather than holding a client of its own.
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
@@ -18,6 +20,9 @@ dependencies = [
     "minio>=7.2",
     "pyjwt>=2.9",
     "python-multipart>=0.0.12",
+    "langfuse>=4.15.1",
+    "langchain>=1.4.0",
+    "langchain-openai>=1.6.0",
 ]
 
 [dependency-groups]

@@ -5,7 +5,20 @@ experiment behind those calls. **Langfuse** manages the prompts.
 
 > Status: **templates only.** Function bodies are `raise NotImplementedError`
 > and the per-component contents are placeholders for their owners to fill in.
-> The `langfuse` / `openai` dependencies are not in `pyproject.toml` yet.
+> The dependencies are installed, so a component owner can start writing.
+
+## The stack
+
+Pinned in `pyproject.toml` because it lives here and nowhere else:
+
+| Package | For |
+|---|---|
+| `langfuse` | Prompt management, tracing, datasets, scores. Ships a LangChain callback handler, so traces come off the chain rather than being hand-rolled |
+| `langchain` | Chain / agent construction. v1 bundles `langgraph`, so a component that needs a graph already has one |
+| `langchain-openai` | The OpenAI-compatible integration — reaches both the on-prem VLM (vLLM, `VLM_API_BASE`) and the external text LLM (`LLM_API_BASE`) |
+
+Both model endpoints speak the OpenAI protocol, so they differ only by base URL,
+key and model id — one `ChatOpenAI` shape covers both.
 
 ## Not a bounded context
 
