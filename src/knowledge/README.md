@@ -33,8 +33,8 @@ species
 |-------|-------|
 | `species` | `species_code` (`'spath'`), scientific / common name |
 | `research_document` | `title`, `body` (the researched text), `content_hash`, `author`, source URL/note, `status` (`active`/`archived`), `created_at`, `archived_at` |
-| `probe_set` | FK to the document, `species_code`, `source_content_hash`, `llm_model`, `prompt_version`, `status` (`draft`/`approved`/`archived`), `generated_at`, `approved_by` / `approved_at`, `archived_at` |
-| `probe` | FK to the set, `slug` (unique per set), `care_need`, `crop`, `priority`, `is_screening`, `question`, `worse_looks_like`, `better_looks_like`, `not_this`, `evidence_quote` |
+| `probe_set` | FK to the document, `species_code`, `source_content_hash`, `llm_model`, `prompt_version`, `langfuse_trace_id`, `status` (`draft`/`approved`/`archived`), `generated_at`, `approved_by` / `approved_at`, `rejected_by` / `rejected_at`, `archived_at`, `note` |
+| `probe` | FK to the set, `slug` (unique per set), `care_need`, `priority`, `is_screening`, `question`, `worse_looks_like`, `better_looks_like`, `not_this`, `evidence_quote` |
 | `probe_action` | FK to the probe, `instruction`, `urgency`, `expect_typical_hours`, `expect_max_hours` (grace period), `expected_signal` |
 | `probe_exemplar` | FK to the probe, `role`, `storage_key` (in the `exemplars` bucket), `content_type`, `label` (JSONB), `origin`, `license`, `caption` |
 
@@ -77,11 +77,44 @@ probes are correct; that is still the human `approved_by` step. Prompt/model
 changes are not covered here — compare `llm_model` / `prompt_version` if you need
 that too.
 
+## Probe generation
+
+The LLM agent lives in **`mlops.knowledge`**, not here: the prompt, its version,
+its hyper-parameters and the validation of what comes back are MLOps' business.
+This context owns what happens to the result — mapping it onto rows, storing it
+as a **draft**, and the human review that follows.
+
+`knowledge/generation.py` is the seam, and it has **no HTTP in it**. The same
+function serves the manual endpoint today and a scheduler tomorrow:
+
+```python
+from core.db import SessionLocal
+from knowledge.generation import generate_pending
+
+with SessionLocal() as session:
+    report = generate_pending(session)          # limit=…, species_code=… optional
+    print(report.considered, len(report.failed))
+```
+
+**The backlog** is every `active` research document that no probe set points at
+(`service.list_unconverted_documents`). Documents are append-only, so a revised
+text is a new row and appears in the backlog on its own. A *rejected* draft does
+**not** put its document back in the queue — a scheduled job that regenerated
+after every rejection would do so forever, and a person already decided that
+prompt cannot handle that text. Regenerating is a deliberate act.
+
+**One document's failure never ends the run.** Each is attempted on its own; a
+failure is recorded in `report.failed` and the rest still generate. A run that
+"succeeded" with every document in `failed` is a broken prompt, not a successful
+job — read the report, not the status code.
+
+Nothing generated is ever usable before a human approves it. `generate_pending`
+only ever writes `draft` rows.
+
 ## HTTP API (`/knowledge`, mounted by `main_web`)
 
 All endpoints require an authenticated **superuser** (`core.users.CurrentSuperuser`)
-— this is the authoring surface, not something plant owners call. The LLM
-generation logic is **not** wired yet, so there is no "create probe set" endpoint.
+— this is the authoring surface, not something plant owners call.
 
 | Method & path | Purpose |
 |---|---|
@@ -89,22 +122,47 @@ generation logic is **not** wired yet, so there is no "create probe set" endpoin
 | `GET /knowledge/species` | list registered species |
 | `POST /knowledge/documents` | add a research document; the species' previous one is archived (404 if `species_code` is unknown) |
 | `GET /knowledge/documents?species_code=&status=` | list documents, newest first; `status` is `active` or `archived` |
+| `GET /knowledge/documents/pending` | the generation backlog: active documents with no probe set |
 | `GET /knowledge/documents/{id}` | one document (active or archived) |
+| `POST /knowledge/probe-sets/generate?species_code=&limit=` | generate a `draft` set for every document in the backlog; `limit` is 1–50 and defaults to 10 |
 | `GET /knowledge/species/{species_code}/probe-sets` | every probe set for the species with `status`, `is_stale`, `probe_count` |
-| `GET /knowledge/probe-sets/{id}` | one set with its probes, each carrying `actions` and `exemplars` |
+| `GET /knowledge/probe-sets/{id}` | one set with its probes (each carrying `actions` and `exemplars`) and a `trace_url` to the generation run behind it |
 | `POST /knowledge/probe-sets/{id}/approve` | make this the species' approved set, archiving the incumbent (`approved_by` = caller's email); works from `draft` **and** from `archived` (swapping an older set back in); 409 if already approved or it has no probes |
+| `POST /knowledge/probe-sets/{id}/reject` | turn down a `draft` with a required `comment`; 409 for any other status |
 | `POST /knowledge/probe-sets/{id}/archive` | `approved` → `archived`, leaving the species with no approved set; 409 otherwise |
 | `GET /knowledge/species/{species_code}/probes` | the approved bundle — same payload as the interface below |
+
+`POST /probe-sets/generate` is a **manual trigger for what becomes a scheduled
+job**, which is why it is capped: each document is an LLM call, and an unbounded
+backfill behind a request would hold the connection for as long as the backlog is
+deep. It answers `200` even when some documents failed — the report body says
+which.
 
 There is no `PATCH` or `DELETE` for documents: a correction is a new document,
 and the superseded text stays readable as an archived row.
 
 ### Authoring flow
 
-`register species → write research document → (LLM job builds a draft probe set —
-not wired yet) → approve`. `/species/{code}/probes` and the in-process interface
-only ever return the **approved** set; approving another one archives the
-previous automatically, and approving an archived one rolls back.
+`register species → write research document → generate a draft probe set →
+approve or reject`. `/species/{code}/probes` and the in-process interface only
+ever return the **approved** set; approving another one archives the previous
+automatically, and approving an archived one rolls back.
+
+### Review is the quality signal
+
+Nothing automatic can judge whether a probe is botanically right, answerable from
+a single photograph, or guarding against the right look-alike. The superuser's
+approve/reject *is* the evaluation, so it is recorded twice:
+
+- **here**, as the `probe_set` status and its `approved_by` / `rejected_by`
+  stamp, with `note` holding the reason — the record, and what the system reads;
+- **in Langfuse**, as a score on the generation trace — the analytics copy, which
+  is what makes "prompt v7 is accepted 80% of the time, v6 was 40%" answerable.
+
+Only the first can fail a request. `knowledge/review.py` forwards the verdict
+best-effort: a Langfuse outage never stands between a person and their decision.
+A rejection **requires a comment** — the verdict alone teaches the next prompt
+version nothing, and *why* it was wrong is the whole value of a human review.
 
 ## Published interface (in-process)
 
@@ -123,9 +181,12 @@ instead of touching the `knowledge` schema.
 
 ```
 src/knowledge/
-├── api.py              # /knowledge router (document authoring + probe inspection)
+├── api.py              # /knowledge router — argument parsing and status codes only
+├── generation.py       # document → draft probe set; the seam to mlops.knowledge.
+│                       #   No HTTP: an endpoint and a scheduler call the same function
+├── review.py           # the human verdict → mlops.knowledge (best-effort)
 ├── interface.py        # get_species_probes() — the in-process interface
-├── service.py          # DB reads/writes; no HTTP, no LLM
+├── service.py          # DB reads/writes; no HTTP, no LLM, no mlops import
 ├── schemas.py          # Pydantic request/response + interface payloads
 ├── db.py               # KNOWLEDGE_SCHEMA, Base (own MetaData), JsonB, utcnow(),
 │                       #   probe_set_freshness (view handle), create_views(), init_models()
@@ -138,6 +199,9 @@ src/knowledge/
     └── exemplar.py     # ProbeExemplar
 ```
 
+- `service.py` never imports `mlops`; `generation.py` and `review.py` are the
+  only two modules that do. Persistence stays testable without the AI stack, and
+  the one-way dependency (`knowledge → mlops`, never back) stays visible.
 - `db.py` reuses `core.db`'s engine / pool but keeps its **own** declarative
   `Base`, so `knowledge` metadata stays isolated from the `auth` schema.
 - Surrogate `uuid` primary keys everywhere except `species` (whose
@@ -146,7 +210,7 @@ src/knowledge/
 - Foreign keys are declared for every parent link. The one cross-column rule —
   `probe_exemplar.license` required when `origin = 'web'` — is left to the
   service layer for now and can become a DB `CHECK` later.
-- Enum-like columns (`status`, `care_need`, `crop`, `role`, `urgency`, `origin`)
+- Enum-like columns (`status`, `care_need`, `role`, `urgency`, `origin`)
   are plain `text`; the partial unique indexes above are what the status values
   are actually load-bearing for.
 - ORM `relationship()`s connect each parent to its children, with

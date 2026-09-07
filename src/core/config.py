@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     admin_name: str
     admin_password: str
 
+    # --- external LLM (text only — never images; used by `mlops`) ---
+    # Where to reach it and how to authenticate — deployment concerns. Which
+    # model to run is not one of them: that belongs to the Langfuse prompt
+    # version's `config`, so it is versioned with the text it was tuned against.
+    llm_api_base: str = ""
+    llm_api_key: str = ""
+
     # --- Langfuse (prompt management, tracing, datasets; used by `mlops`) ---
     # Langfuse is split by project, one per LLM-using component, so there is a
     # key pair per component rather than one for the server. Resolved by
