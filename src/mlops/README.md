@@ -57,16 +57,31 @@ without a change to shared code rippling across all four.
 
 ### The template inside each package
 
-| File | Holds |
-|---|---|
-| `prompts.py` | The prompt names in that Langfuse project, and how to fetch a version. One place, so `runtime` and `experiment` agree |
-| `runtime.py` | **Execution code.** Resolve the `production` prompt → call the model → parse → trace. Takes `label` / `version` / `overrides` so experiments can drive it |
-| `experiment.py` | **Experiment code.** Runs `runtime`'s function over a Langfuse dataset as a dataset run. `python -m mlops.<component>.experiment` |
-| `evaluators.py` | That component's scorers |
+`knowledge/` is the worked example, and its shape is the one to copy:
 
-Add modules beyond these as the work needs them — `knowledge/` added `schemas.py`
-(the output contract) and `review.py` (the human verdict). That is the owner's
-call.
+| Path | Holds |
+|---|---|
+| `contract.py` | The I/O types and the `ProbeAgent` protocol every version implements |
+| `registry.py` | Which versions exist; `get_agent(version)` — the caller's one choice |
+| `publishing.py` | Prompt files → Langfuse versions, idempotently, **never labelled** |
+| `agents/<v>/agent.py` | One interchangeable implementation |
+| `agents/<v>/prompts/<name>/` | Its prompt text and config, as files |
+| `agents/<v>/experiment.py` | Its bench. `python -m mlops.<component>.agents.<v>.experiment` |
+| `evaluators.py` | Scorers over the contract's result type — shared across versions |
+
+Add modules beyond these as the work needs them. That is the owner's call.
+
+### Two levers, at different speeds
+
+| Change | Where | Deploy |
+|---|---|---|
+| Prompt text of a live version | edit the file → run the experiment → move `production` in Langfuse | **no** |
+| Which agent structure runs | `DEFAULT_VERSION` in `registry.py` | yes |
+
+Agent versions each own a **namespace** of prompt names
+(`knowledge/v1/generate-probes`, `knowledge/v2/draft`), so every version has its
+own independent `production` label. Promoting v2's prompt cannot move what v1
+runs on — which is what makes keeping old versions around safe.
 
 ### Validate before you return
 
@@ -165,10 +180,21 @@ client. A dataset named `knowledge-research-documents` backs the experiment
 runner; its items have no `expected_output`, because nobody can write the one
 correct probe set for a document.
 
-Both are bootstrapped by `scripts/seed_langfuse_knowledge.py` (`--dry-run` prints
-the prompt without sending it). That script is a **starting point, not the source
-of truth**: after the first run the prompt is edited and versioned in the Langfuse
-UI, and running the script again creates another version rather than updating v1.
+### Where prompt text lives
+
+**In this repository**, under `agents/<version>/prompts/`, and published from
+there by `publishing.sync()`. Prompts are not written in the Langfuse UI: a
+prompt change is a diff someone reviews, its history sits with the code that
+depends on it, and a Langfuse project can be rebuilt from scratch.
+
+Langfuse owns what a repository cannot — the version registry, the traces and
+dataset runs each version produced, the human scores on them, and the
+`production` label that decides what is live.
+
+Publishing is **idempotent and never deploys**: an unchanged prompt is not
+republished (so version numbers count decisions, not invocations), and a new
+version arrives unlabelled. It goes live only when a person moves `production`
+after reading the run.
 
 ## Bringing up a component's Langfuse project
 
@@ -186,12 +212,10 @@ Langfuse self-hosting docs.)
    pair. The SDK's own `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` /
    `LANGFUSE_BASE_URL` are **not** read by this project; the per-component names
    in `.env.example` are.
-3. **Verify** before doing anything else:
-   `uv run python scripts/seed_langfuse_knowledge.py --check`
-4. **Seed** the prompt and the experiment dataset:
-   `uv run python scripts/seed_langfuse_knowledge.py`
-5. **Run an experiment:**
-   `uv run python -m mlops.knowledge.experiment --run-name v1-baseline`
+3. **Run an experiment.** It publishes the prompt files and scores them:
+   `uv run python -m mlops.knowledge.agents.v1.experiment --run-name v1-baseline`
+4. **Read the run** in Langfuse and judge the probes yourself.
+5. **Promote** — move the `production` label onto the version you accepted.
 
 ### Experiments need no database
 

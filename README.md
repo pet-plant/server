@@ -138,7 +138,7 @@ that have none yet (`knowledge.generation.generate_pending` — today it is also
 reachable as `POST /knowledge/probe-sets/generate` for manual runs). The concrete
 job catalogue is owned by `orchestrator`.
 Prompt experiments are not jobs — they are run on demand with
-`python -m mlops.<component>.experiment`.
+`python -m mlops.<component>.agents.<version>.experiment`.
 
 ---
 

@@ -33,7 +33,7 @@ species
 |-------|-------|
 | `species` | `species_code` (`'spath'`), scientific / common name |
 | `research_document` | `title`, `body` (the researched text), `content_hash`, `author`, source URL/note, `status` (`active`/`archived`), `created_at`, `archived_at` |
-| `probe_set` | FK to the document, `species_code`, `source_content_hash`, `llm_model`, `prompt_version`, `langfuse_trace_id`, `status` (`draft`/`approved`/`archived`), `generated_at`, `approved_by` / `approved_at`, `rejected_by` / `rejected_at`, `archived_at`, `note` |
+| `probe_set` | FK to the document, `species_code`, `source_content_hash`, `llm_model`, `agent_version`, `prompt_version`, `langfuse_trace_id`, `status` (`draft`/`approved`/`archived`), `generated_at`, `approved_by` / `approved_at`, `rejected_by` / `rejected_at`, `archived_at`, `note` |
 | `probe` | FK to the set, `slug` (unique per set), `care_need`, `priority`, `is_screening`, `question`, `worse_looks_like`, `better_looks_like`, `not_this`, `evidence_quote` |
 | `probe_action` | FK to the probe, `instruction`, `urgency`, `expect_typical_hours`, `expect_max_hours` (grace period), `expected_signal` |
 | `probe_exemplar` | FK to the probe, `role`, `storage_key` (in the `exemplars` bucket), `content_type`, `label` (JSONB), `origin`, `license`, `caption` |
@@ -83,6 +83,11 @@ The LLM agent lives in **`mlops.knowledge`**, not here: the prompt, its version,
 its hyper-parameters and the validation of what comes back are MLOps' business.
 This context owns what happens to the result — mapping it onto rows, storing it
 as a **draft**, and the human review that follows.
+
+The agent is **interchangeable**. `mlops.knowledge.get_agent()` returns whichever
+version is current, behind a fixed input/output shape; `probe_set` records both
+`agent_version` (the structure) and `prompt_version` (the text), because a
+regression is one or the other and one column could not say which.
 
 `knowledge/generation.py` is the seam, and it has **no HTTP in it**. The same
 function serves the manual endpoint today and a scheduler tomorrow:

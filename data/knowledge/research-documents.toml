@@ -1,0 +1,52 @@
+# One Langfuse dataset. The file stem is the dataset name.
+#
+# Every [[items]] block is one research document, and one experiment item.
+# The keys under an item are exactly the prompt variables the agent compiles
+# its template with (mlops.knowledge.contract.PROMPT_VARIABLES), plus `id`.
+#
+# There is deliberately no expected output: nobody can write the one correct
+# probe set for a document, and a metric built on a made-up answer is worse
+# than no metric. Automatic scores measure well-formedness; a person judges
+# the probes.
+
+description = """
+Research documents for the probe-generation agent. Each one is written the way
+a real one would be, including the parts that are meant to be *rejected* — the
+normal ageing and cosmetic notes a probe must not fire on.
+"""
+
+[[items]]
+# A stable id: re-running the sync updates this item instead of adding a copy.
+id = "spath"
+species_code = "spath"
+scientific_name = "Spathiphyllum wallisii"
+common_name = "Peace lily"
+document_title = "Watering, light and common problems"
+document_body = """
+Spathiphyllum wallisii wants soil that stays evenly moist but never waterlogged. When the soil dries out the whole plant droops dramatically within a few hours: the leaf blades go limp and hang down over the rim of the pot. It recovers within a day of a thorough watering, and the droop is the plant's normal warning rather than damage. A plant that has been left dry repeatedly develops brown, crisp leaf tips that do not recover.
+
+Overwatering looks different and is far more dangerous. The leaves turn yellow starting with the oldest, lowest ones, and they stay limp even after the soil has drained. The soil surface may smell sour and stay wet for more than a week. Let the top few centimetres dry before watering again, and check that the pot drains freely.
+
+It tolerates low light better than most houseplants, but direct midday sun scorches the leaves: pale bleached patches appear in the middle of the blade, and the leaf margins turn brown and papery. Move it out of direct sun; the scorched tissue never recovers, so judge improvement by the new leaves.
+
+A plant kept in very deep shade stays green and healthy-looking but stops flowering entirely and puts out unusually long, thin leaf stalks that flop outwards. Move it to bright indirect light and new growth will come in shorter and sturdier.
+
+Dust builds up on the broad leaves and dulls them; this is cosmetic and is not a sign of ill health. Yellowing confined to a single oldest leaf at the base is also normal ageing.
+"""
+
+[[items]]
+# A stable id: re-running the sync updates this item instead of adding a copy.
+id = "ficus-lyrata"
+species_code = "ficus-lyrata"
+scientific_name = "Ficus lyrata"
+common_name = "Fiddle-leaf fig"
+document_title = "Draughts, watering and leaf drop"
+document_body = """
+Ficus lyrata is notorious for dropping leaves after any sudden change. The classic trigger is a cold draught: leaves at the level of the draught turn yellow and fall within a week or two, while the rest of the plant looks fine. Keep it away from doors that open to the outside and from air-conditioning outlets.
+
+Water when the top two to three centimetres of soil are dry. Underwatering shows as leaves that curl inwards along the midrib and feel papery, starting at the top of the plant. Overwatering produces dark brown patches that begin in the centre of the leaf, surrounded by a yellow halo, and these spread over several weeks.
+
+It needs bright indirect light. In light that is too low the new leaves come in noticeably smaller than the old ones and the gaps between leaves along the stem grow longer. In direct sun through glass the upper leaves develop bleached, tan patches.
+
+Brown crispy edges on otherwise healthy green leaves are usually low humidity or accumulated fertiliser salts, not disease. Old leaves at the very bottom of the trunk yellowing one at a time is normal.
+"""

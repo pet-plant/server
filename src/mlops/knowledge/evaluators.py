@@ -21,7 +21,7 @@ probe. It just is not the same question as "are these the right probes".
 Every function is an evaluator in the Langfuse sense: keyword-only ``input`` /
 ``output`` / ``expected_output`` / ``metadata``, returning
 :class:`langfuse.Evaluation`. ``output`` is the
-:class:`~mlops.knowledge.runtime.GenerateProbesResult` the task function
+:class:`~mlops.knowledge.contract.GenerateProbesResult` the task function
 returned, or ``None`` when generation failed outright.
 """
 
@@ -31,7 +31,7 @@ from typing import Any
 
 from langfuse import Evaluation
 
-from mlops.knowledge.runtime import GenerateProbesResult
+from mlops.knowledge.contract import GenerateProbesResult
 
 
 def _result(output: Any) -> GenerateProbesResult | None:

@@ -18,7 +18,7 @@ SRC = Path(__file__).resolve().parents[2] / "src"
 
 PROBE = """
 import sys
-import mlops.knowledge.experiment  # noqa: F401
+import mlops.knowledge.agents.v1.experiment  # noqa: F401
 
 forbidden = sorted(
     name
@@ -46,6 +46,6 @@ def test_the_experiment_cli_imports_no_database_and_no_bounded_context() -> None
     assert result.returncode == 0, result.stderr
     pulled_in = [name for name in result.stdout.strip().split(",") if name]
     assert pulled_in == [], (
-        "mlops.knowledge.experiment must not need a database or a bounded "
+        "the experiment CLI must not need a database or a bounded "
         f"context, but importing it pulled in: {pulled_in}"
     )

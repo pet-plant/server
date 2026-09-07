@@ -112,6 +112,7 @@ class ProbeSetSummary(BaseModel):
     species_code: str
     research_document_id: uuid.UUID
     llm_model: str
+    agent_version: str | None
     prompt_version: str | None
     status: str  # 'draft' | 'approved' | 'archived'
     generated_at: datetime

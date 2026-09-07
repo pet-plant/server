@@ -1,4 +1,4 @@
-"""The generate → validate → repair loop, and the config it reads off the prompt.
+"""Agent v1: the generate → validate → repair loop, and the config it reads.
 
 The model is a stub returning canned answers: what is under test is that an
 invalid answer comes back to the model *as a correction* rather than as a
@@ -11,12 +11,9 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 
-from mlops.knowledge import runtime
-from mlops.knowledge.runtime import (
-    GenerateProbesInput,
-    GenerationConfig,
-    ProbeGenerationError,
-)
+from mlops.knowledge.agents.v1 import agent as v1
+from mlops.knowledge.agents.v1.agent import GenerationConfig
+from mlops.knowledge.contract import GenerateProbesInput, ProbeGenerationError
 
 DOCUMENT = "The leaves droop noticeably when it dries out."
 
@@ -71,11 +68,11 @@ class ScriptedModel:
 @pytest.fixture(autouse=True)
 def no_langfuse(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tracing is not what these tests are about, and it needs credentials."""
-    monkeypatch.setattr(runtime, "get_callback_handler", lambda _: None)
+    monkeypatch.setattr(v1, "get_callback_handler", lambda _: None)
 
 
 def _run(model: ScriptedModel, *, max_attempts: int = 3) -> Any:
-    return runtime._run_with_repair(
+    return v1._run_with_repair(
         TEMPLATE,
         model,  # type: ignore[arg-type]
         PAYLOAD,
@@ -181,7 +178,7 @@ def test_everything_but_the_model_has_a_default() -> None:
 
     assert config.temperature == 0.0
     assert config.max_tokens is None
-    assert config.max_attempts == runtime.DEFAULT_MAX_ATTEMPTS
+    assert config.max_attempts == v1.DEFAULT_MAX_ATTEMPTS
 
 
 @pytest.mark.parametrize("prompt_config", [None, {}, {"temperature": 0.3}])

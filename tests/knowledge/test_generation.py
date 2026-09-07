@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from knowledge import generation, service
 from knowledge.models import ResearchDocument, Species
 from knowledge.schemas import DocumentCreate
-from mlops.knowledge import GenerateProbesResult, ProbeGenerationError
+from mlops.knowledge import GenerateProbesResult, ProbeGenerationError, PromptRef
 from mlops.knowledge.schemas import (
     GeneratedAction,
     GeneratedProbe,
@@ -66,26 +66,42 @@ def _generated(slug: str = "water_deficit.leaf_droop") -> GeneratedProbeSet:
 def _result(**overrides: Any) -> GenerateProbesResult:
     defaults: dict[str, Any] = {
         "probe_set": _generated(),
+        "agent_version": "v1",
         "model": "gpt-4o-2024-11-20",
-        "prompt_name": "knowledge/generate-probes",
-        "prompt_version": 7,
+        "prompts": (PromptRef("knowledge/v1/generate-probes", 7),),
         "attempts": 1,
         "trace_id": "0123456789abcdef0123456789abcdef",
     }
     return GenerateProbesResult(**{**defaults, **overrides})
 
 
+class StubAgent:
+    """Stands in for a real agent, recording what it was asked to generate."""
+
+    version = "v1"
+
+    def __init__(self, run: Any) -> None:
+        self.calls: list[Any] = []
+        self._run = run
+
+    def run(self, payload: Any, **_: Any) -> GenerateProbesResult:
+        self.calls.append(payload)
+        return self._run(payload)
+
+
+def install_agent(
+    monkeypatch: pytest.MonkeyPatch, run: Any
+) -> list[Any]:
+    """Point `knowledge` at a stub agent; returns the payloads it receives."""
+    agent = StubAgent(run)
+    monkeypatch.setattr(generation, "get_agent", lambda version=None: agent)
+    return agent.calls
+
+
 @pytest.fixture
 def fake_agent(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
-    """Replace the agent with a recorder; returns the list of calls it saw."""
-    calls: list[Any] = []
-
-    def _generate(payload: Any, **kwargs: Any) -> GenerateProbesResult:
-        calls.append(payload)
-        return _result(probe_set=_generated())
-
-    monkeypatch.setattr(generation, "generate_probes", _generate)
-    return calls
+    """A stub agent that always succeeds; returns the calls it saw."""
+    return install_agent(monkeypatch, lambda _payload: _result())
 
 
 @pytest.fixture
@@ -214,7 +230,10 @@ def test_a_generated_set_is_stored_as_a_draft_with_its_provenance(
     # Snapshotted so the freshness view can flag the set when the text moves on.
     assert probe_set.source_content_hash == document.content_hash
     assert probe_set.llm_model == "gpt-4o-2024-11-20"
-    assert probe_set.prompt_version == "knowledge/generate-probes@7"
+    # Structure and prompt are recorded separately: a regression is one or the
+    # other, and a single column could not say which.
+    assert probe_set.agent_version == "v1"
+    assert probe_set.prompt_version == "knowledge/v1/generate-probes@7"
     assert probe_set.langfuse_trace_id == "0123456789abcdef0123456789abcdef"
 
 
@@ -286,12 +305,12 @@ def test_one_failing_document_does_not_end_the_run(
     add_document("spath")
     add_document("ficus", body="Leaves drop in a draught.")
 
-    def _generate(payload: Any, **kwargs: Any) -> GenerateProbesResult:
+    def _generate(payload: Any) -> GenerateProbesResult:
         if payload.species_code == "spath":
             raise ProbeGenerationError(3, ValueError("no valid set"))
         return _result()
 
-    monkeypatch.setattr(generation, "generate_probes", _generate)
+    install_agent(monkeypatch, _generate)
 
     report = generation.generate_pending(session)
 
@@ -343,10 +362,10 @@ def test_generate_endpoint_reports_failures_without_failing(
     """A partial run is a 200 with a populated `failed` list — read the body."""
     add_document()
 
-    def _boom(payload: Any, **kwargs: Any) -> GenerateProbesResult:
+    def _boom(_payload: Any) -> GenerateProbesResult:
         raise ProbeGenerationError(3, ValueError("no valid set"))
 
-    monkeypatch.setattr(generation, "generate_probes", _boom)
+    install_agent(monkeypatch, _boom)
 
     response = client.post("/knowledge/probe-sets/generate")
 

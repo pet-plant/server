@@ -11,13 +11,23 @@ Every context imports :func:`get_settings` rather than reading ``os.environ``.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: The repository root, derived from this file rather than from the working
+#: directory. `src/core/config.py` -> `src/core` -> `src` -> the root; the same
+#: two steps land on `/app` in the container image.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env.example", ".env"),
+        # Absolute, so configuration does not depend on where a process happened
+        # to be started. Relative paths here would resolve against the current
+        # directory, which breaks every entry point that is not run from the
+        # repository root — a cron job, an experiment CLI, a debugger.
+        env_file=(PROJECT_ROOT / ".env.example", PROJECT_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

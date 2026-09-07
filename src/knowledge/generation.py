@@ -40,7 +40,7 @@ from mlops.client import flush
 from mlops.knowledge import (
     GenerateProbesInput,
     GenerateProbesResult,
-    generate_probes,
+    get_agent,
 )
 from mlops.settings import Component
 
@@ -74,7 +74,7 @@ class GenerationReport:
 
 
 def generate_for_document(
-    session: Session, document: ResearchDocument, *, prompt_version: int | None = None
+    session: Session, document: ResearchDocument, *, agent_version: str | None = None
 ) -> ProbeSet:
     """Generate one draft probe set from ``document`` and store it.
 
@@ -82,15 +82,16 @@ def generate_for_document(
     someone revises the research text the freshness view flags this set as
     stale. Commits on success.
 
-    ``prompt_version`` pins a Langfuse prompt version instead of following the
-    ``production`` label — for trying a candidate against real documents. Leave
-    it unset for ordinary runs.
+    ``agent_version`` selects a non-default agent implementation — for running
+    an older structure against a document, or a new one before it is promoted.
+    Leave it unset for ordinary runs; the prompt each agent uses is whatever
+    carries the ``production`` label in Langfuse.
 
     Raises:
         mlops.knowledge.ProbeGenerationError: nothing valid came back.
     """
     species = session.get(Species, document.species_code)
-    result = generate_probes(
+    result = get_agent(agent_version).run(
         GenerateProbesInput(
             species_code=document.species_code,
             scientific_name=(
@@ -100,14 +101,14 @@ def generate_for_document(
             document_title=document.title,
             document_body=document.body,
         ),
-        version=prompt_version,
     )
     probe_set = _store(session, document, result)
     logger.info(
-        "Generated %d probes for %s from document %s (%s, %d attempt(s))",
+        "Generated %d probes for %s from document %s (agent %s, %s, %d attempt(s))",
         len(result.probe_set.probes),
         document.species_code,
         document.id,
+        result.agent_version,
         result.prompt_ref,
         result.attempts,
     )
@@ -129,6 +130,7 @@ def _store(
         species_code=document.species_code,
         source_content_hash=document.content_hash,
         llm_model=result.model,
+        agent_version=result.agent_version,
         prompt_version=result.prompt_ref,
         langfuse_trace_id=result.trace_id,
         status="draft",
@@ -172,7 +174,7 @@ def generate_pending(
     *,
     species_code: str | None = None,
     limit: int | None = None,
-    prompt_version: int | None = None,
+    agent_version: str | None = None,
 ) -> GenerationReport:
     """Generate a draft for every active document that has no probe set yet.
 
@@ -193,7 +195,7 @@ def generate_pending(
     for document in documents:
         try:
             probe_set = generate_for_document(
-                session, document, prompt_version=prompt_version
+                session, document, agent_version=agent_version
             )
         except Exception as exc:  # noqa: BLE001 - one bad document, not a bad run
             session.rollback()

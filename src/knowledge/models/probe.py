@@ -71,6 +71,12 @@ class ProbeSet(Base):
     # Hash of research_document.body at generation time (see the freshness view).
     source_content_hash: Mapped[str] = mapped_column(Text, nullable=False)
     llm_model: Mapped[str] = mapped_column(Text, nullable=False)  # 'gpt-4o-2024-11-20'
+    # Which agent structure produced this set ('v1'). Separate from the
+    # prompt below: a regression is either a structure change or a prompt
+    # change, and one column cannot tell you which.
+    agent_version: Mapped[str | None] = mapped_column(Text)
+    # Every prompt version the run resolved, 'knowledge/v1/generate-probes@4'
+    # (comma-separated when an agent uses more than one).
     prompt_version: Mapped[str | None] = mapped_column(Text)
     # 'draft' | 'approved' | 'archived'
     status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")

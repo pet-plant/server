@@ -73,6 +73,7 @@ def _summary(
         species_code=probe_set.species_code,
         research_document_id=probe_set.research_document_id,
         llm_model=probe_set.llm_model,
+        agent_version=probe_set.agent_version,
         prompt_version=probe_set.prompt_version,
         status=probe_set.status,
         generated_at=probe_set.generated_at,
