@@ -116,6 +116,39 @@ def list_documents(
     return session.scalars(stmt).all()
 
 
+def list_unconverted_documents(
+    session: Session, *, species_code: str | None = None, limit: int | None = None
+) -> Sequence[ResearchDocument]:
+    """Active documents that no probe set has ever been generated from.
+
+    The backlog :func:`knowledge.generation.generate_pending` works through.
+    "Converted" means *any* probe set points at the document — draft, approved
+    or archived. A rejected draft therefore does **not** put its document back
+    in the queue: a scheduled job that regenerated after every rejection would
+    do so forever, and a person already decided that prompt cannot handle this
+    text. Regenerating is a deliberate act (generate for that document again),
+    not something the backlog does on its own.
+
+    Documents are append-only, so a revised text is a *new* row with no set of
+    its own and appears here without any hash comparison. Oldest first, so a
+    limited run works through the backlog in the order it accumulated.
+    """
+    already_generated = select(ProbeSet.research_document_id)
+    stmt = (
+        select(ResearchDocument)
+        .where(
+            ResearchDocument.status == "active",
+            ResearchDocument.id.not_in(already_generated),
+        )
+        .order_by(ResearchDocument.created_at)
+    )
+    if species_code is not None:
+        stmt = stmt.where(ResearchDocument.species_code == species_code)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return session.scalars(stmt).all()
+
+
 # --------------------------------------------------------------------------- #
 # probe inspection
 # --------------------------------------------------------------------------- #
@@ -221,6 +254,35 @@ def approve_probe_set(
     probe_set.approved_by = approved_by
     probe_set.approved_at = now
     probe_set.archived_at = None
+    # Approving a set that had been rejected overrides that verdict; leaving the
+    # rejection stamped on the row would say two things at once.
+    probe_set.rejected_by = None
+    probe_set.rejected_at = None
+    session.commit()
+    session.refresh(probe_set)
+    return probe_set
+
+
+def reject_probe_set(
+    session: Session, probe_set: ProbeSet, *, rejected_by: str, comment: str
+) -> ProbeSet:
+    """Record a reviewer turning down a draft, with their reason.
+
+    Only ``draft`` sets can be rejected — an approved set is retired with
+    :func:`archive_probe_set`, which is a different act. The row is kept
+    (nothing here is deleted): it stays as the record of what the prompt
+    produced and why a person refused it, and ``comment`` is the part a prompt
+    revision is actually written against.
+    """
+    if probe_set.status != "draft":
+        raise ProbeSetTransitionError(
+            f"cannot reject a {probe_set.status} probe set; only drafts"
+        )
+    probe_set.status = "archived"
+    probe_set.rejected_by = rejected_by
+    probe_set.rejected_at = utcnow()
+    probe_set.archived_at = probe_set.rejected_at
+    probe_set.note = comment
     session.commit()
     session.refresh(probe_set)
     return probe_set

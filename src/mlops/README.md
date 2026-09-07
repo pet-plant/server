@@ -3,9 +3,11 @@
 Every VLM / LLM call in the system goes through here, and so does every
 experiment behind those calls. **Langfuse** manages the prompts.
 
-> Status: **templates only.** Function bodies are `raise NotImplementedError`
-> and the per-component contents are placeholders for their owners to fill in.
-> The dependencies are installed, so a component owner can start writing.
+> Status: `mlops/knowledge/` is **implemented** — the probe-generation agent, its
+> validation, its human-review score and its experiment runner. The other three
+> packages are still **templates**: function bodies are `raise NotImplementedError`
+> and the contents are placeholders for their owners. Read `knowledge/` as the
+> worked example of the shape the others follow.
 
 ## The stack
 
@@ -50,7 +52,7 @@ without a change to shared code rippling across all four.
 |---|---|---|---|
 | `mlops/assessment/` | VLM | `run_probe(ProbeInput) -> ProbeVerdict` | TODO |
 | `mlops/advice/` | LLM | `generate_advice(AdviceInput) -> AdviceResult` | TODO |
-| `mlops/knowledge/` | LLM | `generate_probes(...) -> GenerateProbesResult` | TODO |
+| `mlops/knowledge/` | LLM | `generate_probes(GenerateProbesInput) -> GenerateProbesResult` | TODO |
 | `mlops/registry/` | VLM | `identify_species(...) -> SpeciesGuess` | TODO |
 
 ### The template inside each package
@@ -62,8 +64,26 @@ without a change to shared code rippling across all four.
 | `experiment.py` | **Experiment code.** Runs `runtime`'s function over a Langfuse dataset as a dataset run. `python -m mlops.<component>.experiment` |
 | `evaluators.py` | That component's scorers |
 
-Add modules beyond these as the work needs them — an agent graph, a parser, a
-retry policy. That is the owner's call.
+Add modules beyond these as the work needs them — `knowledge/` added `schemas.py`
+(the output contract) and `review.py` (the human verdict). That is the owner's
+call.
+
+### Validate before you return
+
+`knowledge/` sets the pattern the others should follow: the output model is
+Pydantic, it is handed to the LLM as a JSON schema through
+`with_structured_output`, and it is validated again on the way back. A failure
+becomes a **repair message** — the model sees its own answer's errors and fixes
+them — and a set that never validates raises rather than returning. There is no
+"mostly valid" path out of a runtime module.
+
+Three layers, each catching what the one before it cannot:
+
+| Layer | Catches |
+|---|---|
+| JSON schema in the request | Missing fields, wrong types |
+| Pydantic validators | Domain rules: slug format, unique identifiers, ordered durations |
+| A grounding check against the source | Hallucination — output that cites text the input does not contain |
 
 **`experiment.py` calls `runtime.py`'s own function**, with a pinned prompt
 version rather than the `production` label. Experiments and production therefore
@@ -93,6 +113,26 @@ Everything an in-house prompt registry would carry lives in Langfuse instead:
 
 The request path resolves by **label**; experiments pin a **version**.
 
+## Evaluation: what a machine can score, and what it cannot
+
+Not every component has an automatic quality metric, and pretending otherwise is
+worse than admitting it — a scorer nobody believes still moves a `production`
+label. `knowledge` is the clear case: whether a generated probe is botanically
+right is a human judgement, so it is scored by a human.
+
+| | Automatic | Human |
+|---|---|---|
+| What it measures | Well-formedness: did it validate, how many repair rounds, coverage | Quality: is this right, is it usable |
+| Where it runs | `evaluators.py`, every dataset run | A person reviewing, in the authoring UI or a Langfuse annotation queue |
+| What it gates | Whether a version is a candidate at all | Whether it ships |
+
+For `knowledge`, the review surface is the one people already use: a superuser
+approving or rejecting a draft probe set in the `knowledge` API writes the same
+Langfuse score (`probe_set_human_review`) that an annotation queue would. The
+verdict is durable in Postgres first; the copy in Langfuse is best-effort and
+never fails the reviewer's request. Over time it answers the question that
+matters — *what fraction of what prompt v7 produced did people accept?*
+
 **No experiment data is written to Postgres.** If a context later needs to
 correlate its own rows with a trace, the minimal move is one `langfuse_trace_id`
 column on that context's table — every `runtime` result carries the id for
@@ -102,7 +142,66 @@ exactly this.
 
 `LANGFUSE_HOST` plus a public/secret key pair per component, declared in
 `core.config.Settings` and `.env.example`. `VLM_*` / `LLM_*` supply the model
-endpoints.
+endpoints and their credentials.
+
+**No model name lives in the environment.** Which model a prompt runs on is part
+of that prompt version's `config`, so it is versioned with the text it was tuned
+against, and the model a past run used is recoverable from the version it names.
+An env-level default would quietly reintroduce a second source: a prompt missing
+`model` would still run, on whatever the deployment happened to say, and two runs
+of "v7" could differ by machine — which is exactly what makes comparing versions
+meaningless. A prompt config with no `model` raises instead.
+
+### What `knowledge` needs in Langfuse
+
+A chat prompt named **`knowledge/generate-probes`** with the `production` label,
+compiled with exactly these variables (`prompts.GENERATE_PROBES_VARIABLES`):
+
+`species_code`, `scientific_name`, `common_name`, `document_title`, `document_body`
+
+Its `config` carries the hyper-parameters — `model`, `temperature`, `max_tokens`,
+`max_attempts` (the repair budget), and anything else is passed through to the
+client. A dataset named `knowledge-research-documents` backs the experiment
+runner; its items have no `expected_output`, because nobody can write the one
+correct probe set for a document.
+
+Both are bootstrapped by `scripts/seed_langfuse_knowledge.py` (`--dry-run` prints
+the prompt without sending it). That script is a **starting point, not the source
+of truth**: after the first run the prompt is edited and versioned in the Langfuse
+UI, and running the script again creates another version rather than updating v1.
+
+## Bringing up a component's Langfuse project
+
+Nothing here works until the project exists and its keys are in `.env`. Only the
+first step is manual — Langfuse Cloud has no API for creating a project, so the
+project and its key pair are made in the web UI. (Self-hosted Langfuse can do
+this headlessly with its `LANGFUSE_INIT_*` variables at container start; see the
+Langfuse self-hosting docs.)
+
+1. **In the Langfuse UI**, create a project named after the component
+   (`knowledge`), then *Settings → API keys* → create one. One project per
+   component is the whole design — sharing one project across components mixes
+   their traces and loses the per-component accept-rate.
+2. **In `.env`**, set `LANGFUSE_HOST` to your region and the component's key
+   pair. The SDK's own `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` /
+   `LANGFUSE_BASE_URL` are **not** read by this project; the per-component names
+   in `.env.example` are.
+3. **Verify** before doing anything else:
+   `uv run python scripts/seed_langfuse_knowledge.py --check`
+4. **Seed** the prompt and the experiment dataset:
+   `uv run python scripts/seed_langfuse_knowledge.py`
+5. **Run an experiment:**
+   `uv run python -m mlops.knowledge.experiment --run-name v1-baseline`
+
+### Experiments need no database
+
+Steps 3–5 touch Postgres, MinIO and the web process not at all — prompts,
+datasets, runs, traces and scores all live in Langfuse. Two API keys and a laptop
+are the whole requirement, with nothing from `compose.yaml` running.
+
+That is a property worth keeping, and it is easy to break with one convenience
+import: `tests/mlops/test_no_database.py` fails if importing the experiment CLI
+ever pulls in `core.db`, SQLAlchemy or a bounded context.
 
 ## Adding a component
 
@@ -110,3 +209,4 @@ endpoints.
 2. Add its key pair to `core.config.Settings` and `.env.example`.
 3. Register it in `settings.credentials_for()`.
 4. Copy an existing component package as the template.
+5. Create its Langfuse project and keys, as above.
