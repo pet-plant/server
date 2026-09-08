@@ -61,55 +61,195 @@ def _normalise(text: str) -> str:
 
 
 class GeneratedAction(BaseModel):
-    """One remedial action for a probe that has fired."""
+    """One thing the plant's owner should do when this probe fires.
+
+    The two hour fields are a re-check window, not a botanical estimate: they
+    decide when the system looks again and when it is allowed to raise the same
+    alert a second time.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    instruction: Annotated[str, Field(min_length=4, max_length=400)]
-    urgency: Urgency
-    #: When the effect usually becomes visible.
-    expect_typical_hours: Annotated[int, Field(ge=1, le=MAX_EXPECT_HOURS)]
-    #: The grace period: no re-alert until this has elapsed.
-    expect_max_hours: Annotated[int, Field(ge=1, le=MAX_EXPECT_HOURS)]
-    #: What recovery looks like, as a snake_case tag (``leaf_recovery``).
-    expected_signal: Annotated[str | None, Field(pattern=NAME_PATTERN)] = None
+    instruction: Annotated[
+        str,
+        Field(
+            min_length=4,
+            max_length=400,
+            description=(
+                "What the plant's owner should physically do, in one or two "
+                "sentences addressed to them."
+            ),
+        ),
+    ]
+    urgency: Annotated[
+        Urgency,
+        Field(description="How soon the owner should act."),
+    ]
+    expect_typical_hours: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=MAX_EXPECT_HOURS,
+            description=(
+                "Hours until the first visible sign of improvement would "
+                "normally appear, if the owner does this now. The SMALLER of "
+                "the two hour fields."
+            ),
+        ),
+    ]
+    expect_max_hours: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=MAX_EXPECT_HOURS,
+            description=(
+                "Grace period in hours: the same alert is not raised again "
+                "until this has elapsed. Must be GREATER THAN OR EQUAL TO "
+                "expect_typical_hours — it is the outer edge of the same "
+                "window, so it is never the smaller number. When recovery is "
+                "slower than the 720-hour ceiling, use 720 for both rather "
+                "than inverting them."
+            ),
+        ),
+    ]
+    expected_signal: Annotated[
+        str | None,
+        Field(
+            pattern=NAME_PATTERN,
+            description=(
+                "The visible sign of recovery to watch for, as a snake_case "
+                "tag with underscores between words: 'leaf_recovery', "
+                "'new_growth_appears'. Null when there is no single sign."
+            ),
+        ),
+    ] = None
 
     @model_validator(mode="after")
     def _hours_are_ordered(self) -> GeneratedAction:
         if self.expect_max_hours < self.expect_typical_hours:
             raise ValueError(
-                "expect_max_hours must be >= expect_typical_hours "
-                f"(got {self.expect_max_hours} < {self.expect_typical_hours})"
+                "expect_max_hours is the outer edge of the same window as "
+                "expect_typical_hours, so it cannot be the smaller of the two: "
+                f"got expect_max_hours={self.expect_max_hours} and "
+                f"expect_typical_hours={self.expect_typical_hours}. Either raise "
+                "expect_max_hours to at least expect_typical_hours, or lower "
+                "expect_typical_hours if that was the number meant to be large."
             )
         return self
 
 
 class GeneratedProbe(BaseModel):
-    """One single-question check the VLM will later be asked."""
+    """One single-question visual check, answerable from one whole-plant photo.
+
+    A vision model that has never seen this plant before gets one ordinary
+    photograph of it and this probe. Everything here has to work under those
+    conditions: no close-up, no crop, no memory of an earlier photo, no touch or
+    smell, nothing about soil the camera cannot see.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    #: ``<care_need>.<observation>``, unique within the set.
-    slug: str
-    #: The condition being checked for: ``water_deficit``, ``light_excess``, ….
-    care_need: Annotated[str, Field(pattern=NAME_PATTERN)]
-    #: 1 = check first. Unique within the set.
-    priority: Annotated[int, Field(ge=1)]
-    #: Cheap, broad check — run before the rest to decide whether to go on.
-    is_screening: bool
-    #: Answerable from one whole-plant image alone, with no reference to another
-    #: probe. There is no region to point at: assessment judges from the whole
-    #: frame, so a probe that needs a close-up is a probe we cannot run.
-    question: Annotated[str, Field(min_length=8, max_length=300)]
-    worse_looks_like: Annotated[str, Field(min_length=4, max_length=300)]
-    better_looks_like: Annotated[str, Field(min_length=4, max_length=300)]
-    #: The over-detection guard: what resembles this but is not it.
-    not_this: Annotated[str, Field(min_length=4, max_length=300)]
-    #: Verbatim span of the research document this probe rests on. Required —
-    #: a probe with no support in the source text is exactly what we reject.
-    evidence_quote: Annotated[str, Field(min_length=8, max_length=1000)]
+    slug: Annotated[
+        str,
+        Field(
+            description=(
+                "Identifier '<care_need>.<what is visible>' in snake_case, e.g. "
+                "'water_deficit.leaf_droop'. The part before the dot must be "
+                "exactly the care_need below. Unique within the set."
+            ),
+        ),
+    ]
+    care_need: Annotated[
+        str,
+        Field(
+            pattern=NAME_PATTERN,
+            description=(
+                "The underlying condition, snake_case: 'water_deficit', "
+                "'water_excess', 'light_excess', 'light_deficit', "
+                "'cold_draught'. Use the same name for the same condition "
+                "across probes."
+            ),
+        ),
+    ]
+    priority: Annotated[
+        int,
+        Field(
+            ge=1,
+            description="Order to check, 1 first. Each value used once in a set.",
+        ),
+    ]
+    is_screening: Annotated[
+        bool,
+        Field(
+            description=(
+                "True for a cheap, broad check run first to decide whether the "
+                "rest are worth running. At least one probe in the set must be "
+                "true."
+            ),
+        ),
+    ]
+    question: Annotated[
+        str,
+        Field(
+            min_length=8,
+            max_length=300,
+            description=(
+                "One closed question about what is visible in the photo right "
+                "now. Not two questions joined by 'and', and never a comparison "
+                "with an earlier photo."
+            ),
+        ),
+    ]
+    worse_looks_like: Annotated[
+        str,
+        Field(
+            min_length=4,
+            max_length=300,
+            description="What the photo shows when the problem is present.",
+        ),
+    ]
+    better_looks_like: Annotated[
+        str,
+        Field(
+            min_length=4,
+            max_length=300,
+            description="What the photo shows when the plant is fine.",
+        ),
+    ]
+    not_this: Annotated[
+        str,
+        Field(
+            min_length=4,
+            max_length=300,
+            description=(
+                "The over-detection guard: the innocent look-alike that would "
+                "otherwise be mistaken for this problem — normal ageing, a "
+                "cosmetic blemish, the plant's own harmless behaviour. The "
+                "research document usually names it."
+            ),
+        ),
+    ]
+    evidence_quote: Annotated[
+        str,
+        Field(
+            min_length=8,
+            max_length=1000,
+            description=(
+                "A span copied VERBATIM from the research document, word for "
+                "word, that supports this probe. It is checked against the "
+                "document; anything paraphrased or invented is rejected."
+            ),
+        ),
+    ]
 
-    actions: Annotated[list[GeneratedAction], Field(min_length=1, max_length=5)]
+    actions: Annotated[
+        list[GeneratedAction],
+        Field(
+            min_length=1,
+            max_length=5,
+            description="What to do when this probe fires. At least one.",
+        ),
+    ]
 
     @field_validator("slug")
     @classmethod
@@ -131,11 +271,27 @@ class GeneratedProbe(BaseModel):
 
 
 class GeneratedProbeSet(BaseModel):
-    """One generation run's full output, before any human has looked at it."""
+    """Every probe derived from one research document.
+
+    Cover the distinct problems the document describes rather than several
+    variations on one. If it only supports two probes, return two. Slugs and
+    priorities are each unique across the set, and at least one probe must have
+    is_screening set.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    probes: Annotated[list[GeneratedProbe], Field(min_length=1, max_length=12)]
+    probes: Annotated[
+        list[GeneratedProbe],
+        Field(
+            min_length=1,
+            max_length=12,
+            description=(
+                "One per distinct problem the research document supports, "
+                "ordered by the priority field."
+            ),
+        ),
+    ]
 
     @model_validator(mode="after")
     def _identifiers_are_unique(self) -> GeneratedProbeSet:

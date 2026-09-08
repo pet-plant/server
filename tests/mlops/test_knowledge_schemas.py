@@ -156,6 +156,36 @@ def test_a_probe_needs_at_least_one_action() -> None:
         GeneratedProbeSet.model_validate(probe_set(probe(actions=[])))
 
 
+def test_every_field_explains_itself_to_the_model() -> None:
+    """The JSON schema is what the model is actually given.
+
+    Sphinx `#:` comments document the source and reach nothing else, so a field
+    documented only that way arrives as a bare name and a type — which is how
+    `expect_typical_hours` and `expect_max_hours` came back inverted three
+    repair rounds in a row. Descriptions have to be in `Field(description=...)`.
+    """
+    schema = GeneratedProbeSet.model_json_schema()
+    undescribed = [
+        f"{owner}.{field}"
+        for owner, definition in (
+            [*schema.get("$defs", {}).items()] + [("GeneratedProbeSet", schema)]
+        )
+        for field, spec in definition.get("properties", {}).items()
+        if not spec.get("description")
+    ]
+
+    assert undescribed == []
+
+
+def test_the_two_hour_fields_say_which_is_the_larger() -> None:
+    """Two bare integers named 'typical' and 'max' are a coin flip otherwise."""
+    action = GeneratedProbeSet.model_json_schema()["$defs"]["GeneratedAction"]
+    fields = action["properties"]
+
+    assert "SMALLER" in fields["expect_typical_hours"]["description"]
+    assert "GREATER THAN OR EQUAL" in fields["expect_max_hours"]["description"]
+
+
 def test_grace_period_cannot_be_shorter_than_the_typical_wait() -> None:
     """``expect_max_hours`` is the re-alert grace period — inverted, it spams."""
     with pytest.raises(ValidationError, match="expect_max_hours"):
@@ -166,6 +196,27 @@ def test_grace_period_cannot_be_shorter_than_the_typical_wait() -> None:
                 )
             )
         )
+
+
+def test_the_inversion_error_says_how_to_fix_it() -> None:
+    """Observed: the model inverted these three times running.
+
+    The repair message is the only thing it gets to learn from, so the error has
+    to name both values and both ways out, not just assert the inequality.
+    """
+    with pytest.raises(ValidationError) as exc:
+        GeneratedProbeSet.model_validate(
+            probe_set(
+                probe(
+                    actions=[action(expect_typical_hours=720, expect_max_hours=144)]
+                )
+            )
+        )
+
+    message = str(exc.value)
+    assert "expect_max_hours=144" in message
+    assert "expect_typical_hours=720" in message
+    assert "raise expect_max_hours" in message
 
 
 def test_crop_is_gone_and_a_model_that_still_emits_it_is_corrected() -> None:

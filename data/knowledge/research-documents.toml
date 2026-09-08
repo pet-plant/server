@@ -16,37 +16,124 @@ normal ageing and cosmetic notes a probe must not fire on.
 """
 
 [[items]]
-# A stable id: re-running the sync updates this item instead of adding a copy.
-id = "spath"
-species_code = "spath"
-scientific_name = "Spathiphyllum wallisii"
-common_name = "Peace lily"
-document_title = "Watering, light and common problems"
+id = "pachira_001"
+species_code = "PAAQ"
+scientific_name = "Pachira aquatica"
+common_name = "Money Tree"
+document_title = "Visual Diagnosis and Care Guide for Pachira aquatica"
 document_body = """
-Spathiphyllum wallisii wants soil that stays evenly moist but never waterlogged. When the soil dries out the whole plant droops dramatically within a few hours: the leaf blades go limp and hang down over the rim of the pot. It recovers within a day of a thorough watering, and the droop is the plant's normal warning rather than damage. A plant that has been left dry repeatedly develops brown, crisp leaf tips that do not recover.
+Overwatering and Root Rot
 
-Overwatering looks different and is far more dangerous. The leaves turn yellow starting with the oldest, lowest ones, and they stay limp even after the soil has drained. The soil surface may smell sour and stay wet for more than a week. Let the top few centimetres dry before watering again, and check that the pot drains freely.
+Visual Symptoms: Leaves turn pale or yellow and droop. The base of the trunk feels soft or mushy to the touch, and the soil remains wet for more than 5 days, possibly with mold or a foul odor.
 
-It tolerates low light better than most houseplants, but direct midday sun scorches the leaves: pale bleached patches appear in the middle of the blade, and the leaf margins turn brown and papery. Move it out of direct sun; the scorched tissue never recovers, so judge improvement by the new leaves.
+Solution: Remove the plant from the pot, cut away any black or mushy roots with sterilized shears, and repot in fresh, well-draining soil (e.g., a chunky mix with orchid bark and perlite).
 
-A plant kept in very deep shade stays green and healthy-looking but stops flowering entirely and puts out unusually long, thin leaf stalks that flop outwards. Move it to bright indirect light and new growth will come in shorter and sturdier.
+Recovery Period: 1 to 2 months for a new root system to establish.
 
-Dust builds up on the broad leaves and dulls them; this is cosmetic and is not a sign of ill health. Yellowing confined to a single oldest leaf at the base is also normal ageing.
+Underwatering (Water Deficit)
+
+Visual Symptoms: Leaves lose their firmness, become wrinkled, and droop downwards. If left unwatered, leaves turn yellow to brown and fall off easily. The soil is completely dry and the pot is very light.
+
+Solution: Water thoroughly until water flows from the drainage holes, or soak the pot in a bucket of water for 1 to 2 hours.
+
+Recovery Period: A few hours to 1 day for the turgor pressure to return and leaves to perk up.
+
+Sunburn (Light Stress)
+
+Visual Symptoms: Parts of the leaves appear bleached, white, or develop dry, crispy brown patches. This usually happens after suddenly moving the plant to direct sunlight.
+
+Solution: Move the plant to a location with bright, indirect light (e.g., behind a sheer curtain) and trim off the severely damaged leaves.
+
+Recovery Period: 1 to 2 months during the growing season for the plant to push out new foliage.
+
+Lack of Light (Etiolation)
+
+Visual Symptoms: Stems grow abnormally long, thin, and weak (leggy). The new leaves are pale green, and older leaves may drop off one by one.
+
+Solution: Gradually move the plant to a brighter spot over a few weeks to avoid sunburn. Prune back the leggy stems to encourage branching.
+
+Recovery Period: 3 to 6 weeks for dormant buds to activate and grow new shoots after pruning.
+
+Cold Stress
+
+Visual Symptoms: Leaves lose their green color (turning white or yellow), eventually turn brown, and drop off in large numbers. Occurs when exposed to temperatures below 10 degrees Celsius or cold drafts.
+
+Solution: Move to a consistently warm room (above 15 degrees Celsius) away from cold windows and direct heater drafts.
+
+Recovery Period: Several months; the plant will usually remain dormant and only sprout new leaves in the spring once temperatures rise.
+
+Nutrient Deficiency
+
+Visual Symptoms: Varies by nutrient. Nitrogen deficiency causes older leaves to turn yellow. Potassium deficiency causes brown scorching on leaf edges. Iron deficiency causes new leaves to turn pale or white while the veins remain green (interveinal chlorosis).
+
+Solution: Apply a balanced, water-soluble fertilizer or specific micronutrients (like iron) during the growing season.
+
+Recovery Period: 2 to 4 weeks for newly emerging leaves to appear healthy.
+
+Fungal Disease (e.g., Anthracnose)
+
+Visual Symptoms: Small, water-soaked brown spots appear on leaves and rapidly expand into dark brown or black lesions with concentric rings. Holes may form in the center of the spots.
+
+Solution: Isolate the plant, cut off and dispose of infected leaves using sterilized tools, and apply a horticultural fungicide. Improve airflow around the plant.
+
+Recovery Period: 1 to 2 months for the plant to replace the lost foliage during the growing season.
+
+Pests (Spider Mites, Scale, Aphids)
+
+Visual Symptoms: Spider mites cause tiny white stippling on leaves and fine webbing. Scale insects look like white cottony bumps and leave a sticky residue (honeydew) that can grow black sooty mold. Aphids cluster on new growth, causing deformed leaves.
+
+Solution: Wipe the leaves with a damp cloth and apply insecticidal soap, neem oil, or a registered miticide/insecticide.
+
+Recovery Period: 2 to 3 weeks for healthy new growth to resume once the pests are eradicated. Damaged leaves will not heal.
 """
 
 [[items]]
 # A stable id: re-running the sync updates this item instead of adding a copy.
-id = "ficus-lyrata"
-species_code = "ficus-lyrata"
-scientific_name = "Ficus lyrata"
-common_name = "Fiddle-leaf fig"
-document_title = "Draughts, watering and leaf drop"
+id = "pothos_001"
+species_code = "EPAU"
+scientific_name = "Epipremnum aureum"
+common_name = "Pothos / Golden Pothos / Devil's Ivy"
+document_title = "Visual Diagnosis and Care Guide for Epipremnum aureum (Pothos)"
 document_body = """
-Ficus lyrata is notorious for dropping leaves after any sudden change. The classic trigger is a cold draught: leaves at the level of the draught turn yellow and fall within a week or two, while the rest of the plant looks fine. Keep it away from doors that open to the outside and from air-conditioning outlets.
+Overwatering and Root Rot
 
-Water when the top two to three centimetres of soil are dry. Underwatering shows as leaves that curl inwards along the midrib and feel papery, starting at the top of the plant. Overwatering produces dark brown patches that begin in the centre of the leaf, surrounded by a yellow halo, and these spread over several weeks.
+Visual Symptoms: The oldest leaves turn soft, limp, and yellow. Stems may become dark or mushy near the soil line, and the soil stays soggy for days, sometimes emitting a musty smell. Healthy roots are firm and white, while rotted roots are brown and mushy.
 
-It needs bright indirect light. In light that is too low the new leaves come in noticeably smaller than the old ones and the gaps between leaves along the stem grow longer. In direct sun through glass the upper leaves develop bleached, tan patches.
+Solution: Stop watering and let the soil dry out. If root rot is present, remove the plant from the pot, trim away the brown, mushy roots with sterilized shears, and repot in fresh, well-draining soil.
 
-Brown crispy edges on otherwise healthy green leaves are usually low humidity or accumulated fertiliser salts, not disease. Old leaves at the very bottom of the trunk yellowing one at a time is normal.
+Recovery Period: 1 to 2 weeks for the plant to stabilize and push new growth once the watering routine is corrected.
+
+Underwatering
+
+Visual Symptoms: The entire plant goes limp and the vines droop significantly. Leaves may turn yellow but feel dry, crispy, and curling. The soil is bone dry, and the pot feels very light when lifted.
+
+Solution: Slowly pour water over the soil until it runs out of the drainage hole, or bottom-water by soaking the pot in a basin of water for 20 to 30 minutes.
+
+Recovery Period: The plant typically perks up and recovers its firmness within a few hours to the same day.
+
+Tap-Water Salts and Mineral Buildup
+
+Visual Symptoms: Yellowing or browning begins at the leaf tips and margins (edges) before spreading to the rest of the leaf. A white crust may also be visible on the soil surface or the rim of the pot.
+
+Solution: Flush the soil thoroughly with plenty of water to leach out accumulated salts and fertilizer residue, and switch to using filtered water or rainwater.
+
+Recovery Period: New, healthy green growth will appear in 2 to 3 weeks after switching the water source and flushing the soil.
+
+Sunburn and Heat Stress
+
+Visual Symptoms: Leaves develop brown or yellow patches from intense light (leaf burn). Alternatively, the plant may wilt during the intense heat of the afternoon but naturally recover its turgor by the evening.
+
+Solution: Move the plant out of direct midday sun to a location with bright, indirect light, or use a sheer curtain to filter the light.
+
+Temperature Stress (Cold Drafts)
+
+Visual Symptoms: Leaves turn yellow or the plant droops at certain times of the day without a clear watering issue.
+
+Solution: Move the plant away from cold windows, air-conditioning vents, or heating systems to a spot with stable temperatures.
+
+Natural Aging (Senescence)
+
+Visual Symptoms: Only one or two of the oldest, lowest leaves on the vine turn yellow and become papery thin, while the tip of the vine continues to push out healthy new growth.
+
+Solution: No treatment is needed as this is a natural aging process. Simply remove the yellow leaf with clean scissors or gently detach it once it releases easily.
 """
