@@ -1,7 +1,7 @@
 """In-memory SQLite wiring and seed helpers for the ``registry`` tests.
 
-``registry`` checks owners against ``auth.users`` and species against
-``knowledge.species`` through their interfaces, so those two tables are created
+``registry`` checks owners and devices against ``auth`` and species against
+``knowledge.species`` through their interfaces, so those tables are created
 alongside its own. ``schema_translate_map`` folds all three schemas into
 SQLite's default one.
 """
@@ -18,6 +18,9 @@ from sqlalchemy.pool import StaticPool
 
 from core.db import Base as AuthBase
 from core.db import get_session
+from core.devices import models as device_models  # noqa: F401 - register tables
+from core.devices.dependencies import get_current_device
+from core.devices.models import Device
 from core.users.dependencies import get_current_active_user
 from core.users.models import User
 from knowledge import models as knowledge_models  # noqa: F401 - register tables
@@ -80,6 +83,20 @@ def add_species(session_factory: sessionmaker[Session]) -> Callable[..., None]:
 
 
 @pytest.fixture
+def add_device(session_factory: sessionmaker[Session]) -> Callable[..., Device]:
+    """Insert a device already paired to ``owner`` (skipping the pairing dance)."""
+
+    def _add(owner: User, physical_id: str) -> Device:
+        device = Device(id=uuid.uuid4(), physical_id=physical_id, owner_id=owner.id)
+        with session_factory() as session:
+            session.add(device)
+            session.commit()
+        return device
+
+    return _add
+
+
+@pytest.fixture
 def alice(add_user: Callable[..., User]) -> User:
     return add_user("alice@example.com")
 
@@ -111,12 +128,15 @@ def app(session_factory: sessionmaker[Session]) -> FastAPI:
 
 
 @pytest.fixture
-def client_as(app: FastAPI) -> Iterator[Callable[[User], TestClient]]:
-    """``client_as(user)`` → a test client authenticated as ``user``."""
+def client_as(app: FastAPI) -> Iterator[Callable[[User | Device], TestClient]]:
+    """``client_as(user_or_device)`` → a test client authenticated as that caller."""
     with TestClient(app) as test_client:
 
-        def _as(user: User) -> TestClient:
-            app.dependency_overrides[get_current_active_user] = lambda: user
+        def _as(caller: User | Device) -> TestClient:
+            if isinstance(caller, Device):
+                app.dependency_overrides[get_current_device] = lambda: caller
+            else:
+                app.dependency_overrides[get_current_active_user] = lambda: caller
             return test_client
 
         yield _as

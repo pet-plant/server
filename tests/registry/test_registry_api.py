@@ -4,10 +4,12 @@ from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session, sessionmaker
 
+from core.devices.models import Device
 from core.users.models import User
 
-ClientAs = Callable[[User], TestClient]
+ClientAs = Callable[[User | Device], TestClient]
 MISSING = "00000000-0000-0000-0000-000000000000"
 
 
@@ -16,11 +18,16 @@ def _species(add_species: Callable[..., None]) -> None:
     add_species("spath", "pothos")
 
 
-def test_crud_round_trip(client_as: ClientAs, alice: User) -> None:
+@pytest.fixture
+def alice_device(add_device: Callable[..., Device], alice: User) -> Device:
+    return add_device(alice, "dev-1")
+
+
+def test_crud_round_trip(client_as: ClientAs, alice: User, alice_device: Device) -> None:
     client = client_as(alice)
     created = client.post(
         "/registry/plants",
-        json={"name": "Spathi", "species_code": "spath", "device_id": "dev-001"},
+        json={"name": "Spathi", "species_code": "spath", "device_id": "dev-1"},
     )
     assert created.status_code == 201
     plant = created.json()
@@ -38,7 +45,7 @@ def test_crud_round_trip(client_as: ClientAs, alice: User) -> None:
     assert patched.status_code == 200
     assert patched.json()["name"] == "Spathi II"
     assert patched.json()["location"] == "kitchen"
-    assert patched.json()["device_id"] == "dev-001"  # untouched
+    assert patched.json()["device_id"] == "dev-1"  # untouched
 
     assert client.delete(f"/registry/plants/{plant_id}").status_code == 204
     # archived: gone from the default listing, still resolvable by id
@@ -134,7 +141,9 @@ def test_species_confirmation(client_as: ClientAs, alice: User) -> None:
     assert both["species_confirmed_at"] is not None
 
 
-def test_device_is_bound_to_one_live_plant(client_as: ClientAs, alice: User) -> None:
+def test_device_is_bound_to_one_live_plant(
+    client_as: ClientAs, alice: User, alice_device: Device
+) -> None:
     client = client_as(alice)
     first = client.post("/registry/plants", json={"name": "a", "device_id": "dev-1"}).json()
 
@@ -156,7 +165,9 @@ def test_device_is_bound_to_one_live_plant(client_as: ClientAs, alice: User) -> 
     assert rebound.status_code == 200
 
 
-def test_unbind_device_with_null(client_as: ClientAs, alice: User) -> None:
+def test_unbind_device_with_null(
+    client_as: ClientAs, alice: User, alice_device: Device
+) -> None:
     client = client_as(alice)
     plant = client.post("/registry/plants", json={"name": "a", "device_id": "dev-1"}).json()
     unbound = client.patch(f"/registry/plants/{plant['id']}", json={"device_id": None})
@@ -164,7 +175,9 @@ def test_unbind_device_with_null(client_as: ClientAs, alice: User) -> None:
     assert client.get("/registry/devices/dev-1/plant").status_code == 404
 
 
-def test_device_lookup(client_as: ClientAs, alice: User, bob: User, admin: User) -> None:
+def test_device_lookup(
+    client_as: ClientAs, alice: User, bob: User, admin: User, alice_device: Device
+) -> None:
     plant = client_as(alice).post(
         "/registry/plants", json={"name": "a", "device_id": "dev-1"}
     ).json()
@@ -180,3 +193,78 @@ def test_missing_plant_returns_404(client_as: ClientAs, admin: User) -> None:
     assert client.get(f"/registry/plants/{MISSING}").status_code == 404
     assert client.patch(f"/registry/plants/{MISSING}", json={"name": "x"}).status_code == 404
     assert client.delete(f"/registry/plants/{MISSING}").status_code == 404
+
+
+def test_only_devices_paired_to_the_owner_can_be_bound(
+    client_as: ClientAs, add_device: Callable[..., Device], alice: User, bob: User
+) -> None:
+    add_device(bob, "dev-bob")
+    client = client_as(alice)
+    # never paired
+    assert client.post(
+        "/registry/plants", json={"name": "a", "device_id": "dev-x"}
+    ).status_code == 422
+    # paired, but to someone else
+    assert client.post(
+        "/registry/plants", json={"name": "a", "device_id": "dev-bob"}
+    ).status_code == 422
+    plant = client.post("/registry/plants", json={"name": "a"}).json()
+    assert client.patch(
+        f"/registry/plants/{plant['id']}", json={"device_id": "dev-bob"}
+    ).status_code == 422
+
+
+def test_admin_binds_the_owners_device(
+    client_as: ClientAs, alice: User, admin: User, alice_device: Device
+) -> None:
+    created = client_as(admin).post(
+        "/registry/plants",
+        json={"name": "a", "owner_id": str(alice.id), "device_id": "dev-1"},
+    )
+    assert created.status_code == 201
+    # the admin's own account does not own dev-1, so this is refused
+    assert client_as(admin).post(
+        "/registry/plants", json={"name": "b", "device_id": "dev-1"}
+    ).status_code == 422
+
+
+def test_device_reads_its_own_plant(
+    client_as: ClientAs, alice: User, alice_device: Device
+) -> None:
+    assert client_as(alice_device).get("/registry/devices/me/plant").status_code == 404
+
+    plant = client_as(alice).post(
+        "/registry/plants", json={"name": "a", "device_id": "dev-1"}
+    ).json()
+    mine = client_as(alice_device).get("/registry/devices/me/plant")
+    assert mine.status_code == 200
+    assert mine.json()["id"] == plant["id"]
+
+
+def test_device_passed_on_to_a_new_owner(
+    client_as: ClientAs,
+    session_factory: sessionmaker[Session],
+    alice: User,
+    bob: User,
+    alice_device: Device,
+) -> None:
+    alices = client_as(alice).post(
+        "/registry/plants", json={"name": "a", "device_id": "dev-1"}
+    ).json()
+
+    # alice revokes, bob pairs it: the device row now belongs to bob
+    with session_factory() as session:
+        device = session.get(Device, alice_device.id)
+        assert device is not None
+        device.owner_id = bob.id
+        session.commit()
+
+    # the old binding no longer resolves — bob's frames must not land on alice's plant
+    assert client_as(alice).get("/registry/devices/dev-1/plant").status_code == 404
+    assert client_as(bob).get("/registry/devices/dev-1/plant").status_code == 404
+
+    # bob can bind it; alice's stale binding is cleared rather than a 409
+    bobs = client_as(bob).post("/registry/plants", json={"name": "b", "device_id": "dev-1"})
+    assert bobs.status_code == 201
+    assert client_as(bob).get("/registry/devices/dev-1/plant").json()["id"] == bobs.json()["id"]
+    assert client_as(alice).get(f"/registry/plants/{alices['id']}").json()["device_id"] is None

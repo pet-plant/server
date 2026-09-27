@@ -27,7 +27,7 @@ plant is which.
 | `name` | text | The owner's name for the plant |
 | `species_code` | text, nullable | `knowledge.species.species_code`. Not a DB foreign key — checked via `knowledge.get_species`. `NULL` until resolved |
 | `species_confirmed_at` | timestamptz, nullable | Set when the owner confirms the species; cleared when the species changes |
-| `device_id` | text, nullable | Physical id of the planter / camera that photographs it (serial, MAC, provisioning id) |
+| `device_id` | text, nullable | `auth.devices.physical_id` (`core`) of the planter that photographs it. Must be a device **paired to the plant's owner** — checked via `core.devices` |
 | `location` | text, nullable | Free-text placement |
 | `note` | text, nullable | |
 | `created_at` / `updated_at` | timestamptz | |
@@ -45,6 +45,15 @@ plant is which.
 
   Archiving frees the device; the archived row keeps its `device_id` as a record
   of where its frames came from.
+- **Devices are paired in `core`, bound here.** A planter is attached to an
+  account through `core`'s `/devices` pairing flow (see the `core` README); the
+  owner then binds it to one of their plants with `PATCH /registry/plants/{id}`
+  `{"device_id": …}`. Revoking the device in `core` stops its uploads but keeps
+  the binding, so pairing it again resumes where it left off.
+- **A device passed on to someone else.** Once revoked and paired to a new
+  owner, the old owner's binding is *stale*: it no longer resolves (device →
+  plant lookups check the device's current owner), and it is cleared when the
+  new owner binds the device to their own plant.
 
 ## Inputs
 
@@ -70,12 +79,13 @@ Another owner's plant answers **404**, not 403, so ids cannot be probed.
 
 | Method & path | Purpose |
 |---|---|
-| `POST /registry/plants` | register a plant for the caller (a superuser may pass `owner_id`). 422 for an unknown `species_code` / `owner_id`, 409 if `device_id` is bound to another live plant |
+| `POST /registry/plants` | register a plant for the caller (a superuser may pass `owner_id`). 422 for an unknown `species_code` / `owner_id` or a `device_id` not paired to the owner, 409 if `device_id` is bound to another live plant |
 | `GET /registry/plants?owner_id=&species_code=&include_archived=` | list plants, oldest first; `owner_id` is ignored for non-admins |
 | `GET /registry/plants/{id}` | one plant (live or archived) |
 | `PATCH /registry/plants/{id}` | partial update; `null` clears a nullable field (`device_id: null` unbinds). `species_confirmed: true/false` sets / clears the confirmation. 409 on an archived plant |
 | `DELETE /registry/plants/{id}` | archive (204). 409 if already archived |
-| `GET /registry/devices/{device_id}/plant` | the live plant bound to a device |
+| `GET /registry/devices/{device_id}/plant` | owner: the live plant bound to a device |
+| `GET /registry/devices/me/plant` | **device** (`CurrentDevice`): the plant I photograph |
 
 ## Published interface (in-process)
 
@@ -84,7 +94,7 @@ from registry import (
     list_plant_ids,       # (session, *, owner_id=, species_code=, include_archived=False) -> list[UUID]
     get_plant,            # (session, plant_id) -> PlantRead | None       (archived ones too)
     get_plants,           # (session, [plant_id, ...]) -> {plant_id: PlantRead}
-    get_plant_by_device,  # (session, device_id) -> PlantRead | None      (live plant only)
+    get_plant_by_device,  # (session, physical_id) -> PlantRead | None    (live, current owner's only)
     is_plant_owned_by,    # (session, plant_id, user_id) -> bool
     PlantRead,
 )
@@ -94,7 +104,8 @@ plant.model_dump(mode="json")  # -> {id, owner_id, name, species_code, species_c
                                #     device_id, location, note, created_at, updated_at, archived_at}
 ```
 
-- `capture` resolves an incoming frame's `device_id` with `get_plant_by_device`.
+- `capture` guards its upload route with `core.devices.CurrentDevice` and resolves
+  the frame's plant with `get_plant_by_device(session, device.physical_id)`.
 - `assessment` reads `species_code` from `get_plant` to fetch the probe bundle
   from `knowledge`.
 - Batch jobs enumerate targets with `list_plant_ids(species_code=...)`.

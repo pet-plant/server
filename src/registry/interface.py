@@ -56,9 +56,11 @@ def get_plants(session: Session, plant_ids: list[uuid.UUID]) -> dict[uuid.UUID, 
 def get_plant_by_device(session: Session, device_id: str) -> PlantRead | None:
     """The live plant a physical device photographs, or ``None`` if unbound.
 
-    What ``capture`` calls when a frame arrives carrying only the device id.
+    What ``capture`` calls with ``CurrentDevice.physical_id`` when a frame
+    arrives. A binding made by an earlier owner of the device resolves to
+    ``None``, never to that owner's plant.
     """
-    plant = service.get_live_plant_by_device(session, device_id)
+    plant = service.resolve_device_plant(session, device_id)
     return None if plant is None else PlantRead.model_validate(plant)
 
 

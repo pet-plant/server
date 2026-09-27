@@ -1,8 +1,9 @@
 """Persistence and read queries for the ``registry`` context.
 
-No HTTP concerns here. References into other contexts (the owner in ``core``,
-the species in ``knowledge``) are checked through their published interfaces —
-the ``registry`` schema holds no foreign key to either.
+No HTTP concerns here. References into other contexts (the owner and the
+paired device in ``core``, the species in ``knowledge``) are checked through
+their published interfaces — the ``registry`` schema holds no foreign key to
+any of them.
 
 Plants are never deleted: :func:`archive_plant` stamps ``archived_at``, because
 every other context keys its history on ``plant.id``.
@@ -15,6 +16,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.devices import get_device_by_physical_id
 from core.users.service import get_user_by_id
 from knowledge.interface import get_species
 from registry.db import utcnow
@@ -28,6 +30,10 @@ class UnknownSpeciesError(Exception):
 
 class UnknownOwnerError(Exception):
     """Raised when ``owner_id`` is not a registered user."""
+
+
+class UnknownDeviceError(Exception):
+    """Raised when ``device_id`` is not a device paired to the plant's owner."""
 
 
 class DeviceAlreadyBoundError(Exception):
@@ -48,14 +54,32 @@ def _check_species(session: Session, species_code: str | None) -> None:
         raise UnknownSpeciesError(species_code)
 
 
-def _check_device_free(
-    session: Session, device_id: str | None, *, except_plant: uuid.UUID | None = None
+def _check_device(
+    session: Session,
+    device_id: str | None,
+    *,
+    owner_id: uuid.UUID,
+    except_plant: uuid.UUID | None = None,
 ) -> None:
+    """``device_id`` must be paired to ``owner_id`` and not bound to another plant.
+
+    A binding left behind by a *previous* owner of the device (it was revoked
+    and paired to someone else) is stale: it is cleared rather than reported as
+    a conflict, so the new owner can bind the device.
+    """
     if device_id is None:
         return
+    device = get_device_by_physical_id(session, device_id)
+    if device is None or device.owner_id != owner_id:
+        raise UnknownDeviceError(device_id)
     holder = get_live_plant_by_device(session, device_id)
-    if holder is not None and holder.id != except_plant:
-        raise DeviceAlreadyBoundError(device_id)
+    if holder is None or holder.id == except_plant:
+        return
+    if holder.owner_id != device.owner_id:
+        holder.device_id = None
+        session.flush()
+        return
+    raise DeviceAlreadyBoundError(device_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -69,10 +93,30 @@ def get_plant(session: Session, plant_id: uuid.UUID) -> Plant | None:
 
 
 def get_live_plant_by_device(session: Session, device_id: str) -> Plant | None:
-    """The live plant ``device_id`` is bound to, if any (at most one)."""
+    """The live plant row carrying ``device_id``, if any (at most one).
+
+    Raw lookup — it does not check the device still belongs to the plant's
+    owner. Resolve a device to its plant with :func:`resolve_device_plant`.
+    """
     return session.scalars(
         select(Plant).where(Plant.device_id == device_id, Plant.archived_at.is_(None))
     ).one_or_none()
+
+
+def resolve_device_plant(session: Session, device_id: str) -> Plant | None:
+    """The live plant ``device_id`` photographs, as far as its current owner is concerned.
+
+    ``None`` when the device is unbound, or when the binding was made by an
+    earlier owner of the device (frames from the new owner's device must never
+    land on the old owner's plant).
+    """
+    plant = get_live_plant_by_device(session, device_id)
+    if plant is None:
+        return None
+    device = get_device_by_physical_id(session, device_id)
+    if device is None or device.owner_id != plant.owner_id:
+        return None
+    return plant
 
 
 def list_plants(
@@ -120,7 +164,7 @@ def create_plant(session: Session, data: PlantCreate, *, owner_id: uuid.UUID) ->
     if get_user_by_id(session, owner_id) is None:
         raise UnknownOwnerError(str(owner_id))
     _check_species(session, data.species_code)
-    _check_device_free(session, data.device_id)
+    _check_device(session, data.device_id, owner_id=owner_id)
 
     plant = Plant(
         owner_id=owner_id,
@@ -155,7 +199,9 @@ def update_plant(session: Session, plant: Plant, data: PlantUpdate) -> Plant:
         if changes["species_code"] != plant.species_code:
             plant.species_confirmed_at = None
     if "device_id" in changes:
-        _check_device_free(session, changes["device_id"], except_plant=plant.id)
+        _check_device(
+            session, changes["device_id"], owner_id=plant.owner_id, except_plant=plant.id
+        )
     if "name" in changes and changes["name"] is None:
         del changes["name"]  # a plant always has a name
 

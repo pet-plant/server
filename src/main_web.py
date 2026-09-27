@@ -17,6 +17,7 @@ from fastapi import FastAPI
 
 from core.api import router as health_router
 from core.db import SessionLocal, init_models
+from core.devices import router as devices_router
 from core.users import ensure_admin_user
 from core.users import router as auth_router
 from knowledge import router as knowledge_router
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(devices_router)
     app.include_router(knowledge_router)
     app.include_router(registry_router)
 

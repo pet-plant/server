@@ -1,8 +1,10 @@
 """``/registry`` router — plant registration and lookup (CRUD).
 
 Owners see and change only their own plants; a superuser sees every plant and
-can register one on someone else's behalf. Another owner's plant answers 404,
-not 403, so ids cannot be probed for existence.
+can register one on someone else's behalf. A paired edge device (``CurrentDevice``)
+can read the plant it photographs from ``/registry/devices/me/plant``.
+Another owner's plant answers 404, not 403, so ids cannot be probed for
+existence.
 
 ``DELETE`` archives rather than deletes: every other context keys its history on
 ``plant.id``. Mounted by ``main_web``.
@@ -16,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from core.db import get_session
+from core.devices import CurrentDevice
 from core.users import CurrentUser, User
 from registry import service
 from registry.models import Plant
@@ -37,6 +40,10 @@ def _plant_or_404(session: Session, plant_id: uuid.UUID, user: User) -> Plant:
 _ERROR_RESPONSES: dict[type[Exception], tuple[int, str]] = {
     service.UnknownSpeciesError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown species_code"),
     service.UnknownOwnerError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown owner_id"),
+    service.UnknownDeviceError: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "device_id is not a device paired to the plant's owner",
+    ),
     service.DeviceAlreadyBoundError: (
         status.HTTP_409_CONFLICT,
         "device_id is already bound to another plant",
@@ -114,13 +121,26 @@ def archive_plant(plant_id: uuid.UUID, session: SessionDep, user: CurrentUser) -
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# Declared before `/devices/{device_id}/plant` so "me" is not taken for an id.
+@router.get(
+    "/devices/me/plant",
+    response_model=PlantRead,
+    summary="Device: the plant I photograph",
+)
+def get_my_plant(device: CurrentDevice, session: SessionDep) -> Plant:
+    plant = service.resolve_device_plant(session, device.physical_id)
+    if plant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No plant bound to this device")
+    return plant
+
+
 @router.get(
     "/devices/{device_id}/plant",
     response_model=PlantRead,
     summary="The live plant a physical device is bound to",
 )
 def get_plant_by_device(device_id: str, session: SessionDep, user: CurrentUser) -> Plant:
-    plant = service.get_live_plant_by_device(session, device_id)
+    plant = service.resolve_device_plant(session, device_id)
     if plant is None or not (user.is_superuser or plant.owner_id == user.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No plant bound to this device")
     return plant

@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from core.devices.models import Device
 from core.users.models import User
 from registry import (
     get_plant,
@@ -48,8 +49,9 @@ def test_list_plant_ids_and_filters(
 
 
 def test_get_plant_is_json_serialisable(
-    session_factory: sessionmaker[Session], alice: User
+    session_factory: sessionmaker[Session], add_device: Callable[..., Device], alice: User
 ) -> None:
+    add_device(alice, "dev-1")
     with session_factory() as session:
         plant_id = _register(session, alice, "a", device_id="dev-1")
         plant = get_plant(session, plant_id)
@@ -64,8 +66,9 @@ def test_get_plant_is_json_serialisable(
 
 
 def test_archived_plant_stays_resolvable(
-    session_factory: sessionmaker[Session], alice: User
+    session_factory: sessionmaker[Session], add_device: Callable[..., Device], alice: User
 ) -> None:
+    add_device(alice, "dev-1")
     with session_factory() as session:
         plant_id = _register(session, alice, "a", device_id="dev-1")
         service.archive_plant(session, service.get_plant(session, plant_id))  # type: ignore[arg-type]
@@ -89,7 +92,10 @@ def test_get_plants_skips_unknown_ids(
         assert found[b].name == "b"
 
 
-def test_get_plant_by_device(session_factory: sessionmaker[Session], alice: User) -> None:
+def test_get_plant_by_device(
+    session_factory: sessionmaker[Session], add_device: Callable[..., Device], alice: User
+) -> None:
+    add_device(alice, "dev-1")
     with session_factory() as session:
         plant_id = _register(session, alice, "a", device_id="dev-1")
         plant = get_plant_by_device(session, "dev-1")
