@@ -1,0 +1,21 @@
+# Pipeline schedule for `orchestrator`.
+#
+# Read by `orchestrator.config.load_config()`; the path comes from the
+# ORCHESTRATOR_CONFIG setting (default: this file). The loop re-reads it on
+# every tick, so edits take effect without a restart.
+
+# false: the loop keeps running but queues and runs nothing.
+enabled = true
+
+# How often the loop wakes up to queue due slots and work the queue.
+poll_seconds = 30
+
+# Times below are wall-clock times in this zone.
+timezone = "Asia/Tokyo"
+
+# When a pipeline run is queued for every live plant.
+schedule = ["07:00", "12:00", "17:00"]
+
+# A slot is still queued this long after its time (e.g. the server was
+# restarting at 07:00). Past this window the slot is skipped.
+catch_up_minutes = 60

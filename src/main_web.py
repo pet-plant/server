@@ -22,6 +22,9 @@ from core.users import ensure_admin_user
 from core.users import router as auth_router
 from knowledge import router as knowledge_router
 from knowledge.db import init_models as init_knowledge_models
+from orchestrator import OrchestratorLoop
+from orchestrator import router as orchestrator_router
+from orchestrator.db import init_models as init_orchestrator_models
 from registry import router as registry_router
 from registry.db import init_models as init_registry_models
 
@@ -34,10 +37,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     init_models()
     init_knowledge_models()
     init_registry_models()
+    init_orchestrator_models()
     # Seed / reconcile the bootstrap admin from ADMIN_* settings.
     with SessionLocal() as session:
         ensure_admin_user(session)
-    yield
+    # The scheduled pipeline. Safe to run in every web process: tasks are
+    # claimed atomically, so each is executed once.
+    loop = OrchestratorLoop(SessionLocal)
+    loop.start()
+    try:
+        yield
+    finally:
+        loop.stop()
 
 
 def create_app() -> FastAPI:
@@ -53,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(devices_router)
     app.include_router(knowledge_router)
     app.include_router(registry_router)
+    app.include_router(orchestrator_router)
 
     return app
 
