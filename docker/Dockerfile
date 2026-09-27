@@ -38,6 +38,8 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app src ./src
 # Committed default configuration read by core.config (see .env.example header).
 COPY --chown=app:app .env.example ./
+# Pipeline schedule / failure policy read by orchestrator.config.
+COPY --chown=app:app config ./config
 
 USER app
 

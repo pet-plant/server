@@ -1,34 +1,108 @@
-# orchestrator — orchestration & sync
+# orchestrator — the scheduled pipeline
 
 **Package:** `src/orchestrator/`
 **Part of context 8 (System Integration & Infrastructure).**
 
-## Responsibilities
+## What it does
 
-- **Event bus / message routing**: asynchronous communication between contexts
-  and between the cloud and the edge. Routes the edge capture-batch upload to
-  `capture`; carries pipeline hand-offs where a step is event-driven; delivers
-  `companion` mood/utterance updates back to the edge display (presentation sync).
-- **Batch-workflow coordination**: defines and dispatches the job catalogue that
-  `main_worker` runs (drain capture batches, run probe battery, refresh script
-  bundles, evaluate-and-promote, …).
-- **Device sync**: keeps edge devices and the cloud in agreement on what to
-  render and what to capture.
-- Owns its own schema (`orchestrator`): event outbox / log, job runs, device-sync
-  state.
+At each time in `config/orchestrator.toml`, every live plant (from `registry`)
+gets a **run**, and the run calls the pipeline stages in the order the
+architecture fixes:
 
-## Contracts
+```
+capture (preprocess) → assessment → advice → companion
+```
 
-Message and job contracts are defined here jointly with the producing and
-consuming contexts. The fixed pipeline order is
-`capture → assessment → advice → companion`.
+Each context stores its own result in its own schema, so nothing is passed
+between stages but the run's identifiers (`StageInput`: `run_id`, `plant_id`,
+`scheduled_for`). A plant goes through all four stages before the next plant
+starts.
 
-## HTTP surface
+- **Owns (Postgres schema):** `orchestrator` — `pipeline_run`
+- **Calls:** `registry.list_plant_ids`, and one function per stage context
+- **Driven by:** `OrchestratorLoop`, a background thread `main_web` starts
 
-If this context exposes HTTP (e.g. device-sync endpoints), the routes live in
-`src/orchestrator/api.py` exposing `router: APIRouter`; `main_web` mounts it.
+> Status: PoC. The stage functions in `stages.py` are **stubs** (log and
+> return) with a `TODO(<context>)` where each context's published function
+> goes. Errors are not handled beyond recording them — see below.
+
+## Writing a stage
+
+Replace the stub in `stages.py` with a call to your context's function:
+
+```python
+def run_assessment(payload: StageInput) -> None:
+    from assessment import run_battery
+    run_battery(payload.plant_id, run_id=payload.run_id)
+```
+
+- **Return** when your result is stored — the next stage runs.
+- **Raise `StageSkipped("reason")`** when there is nothing to do (e.g. no new
+  frames): the run ends as `skipped` and the later stages do not run.
+
+## Configuration — `config/orchestrator.toml`
+
+Re-read on every tick, so edits apply without a restart. Path from the
+`ORCHESTRATOR_CONFIG` setting.
+
+| Key | Meaning |
+|---|---|
+| `enabled` | `false` = the loop idles |
+| `poll_seconds` | how often the loop wakes up |
+| `timezone`, `schedule` | when runs are queued (wall-clock times in that zone) |
+| `catch_up_minutes` | a slot is still queued this late (e.g. the server was restarting); after that it is skipped |
+
+## Data model
+
+`pipeline_run` — one plant × one slot:
+
+```
+queued → running → succeeded
+             ├───→ skipped    a stage raised StageSkipped
+             └───→ failed     a stage raised anything else
+```
+
+- `UNIQUE (plant_id, scheduled_for)`: a slot is queued once, however many ticks
+  or processes see it.
+- `current_stage` is where the run is, or where it stopped; `detail` holds the
+  error or skip reason.
+- A run is claimed with a conditional `UPDATE … WHERE status = 'queued'`, so two
+  web processes never execute the same run.
+
+## Errors (PoC)
+
+Not handled beyond this: a stage that raises marks its run `failed` (the error
+goes to `detail` and the log) and the loop moves on to the next plant. Nothing
+is retried, nothing times out, and a run that was executing when the process
+died stays `running`. Revisit once the stages are real.
+
+## HTTP API (`/orchestrator`, superuser only)
+
+| Method & path | Purpose |
+|---|---|
+| `GET /orchestrator/runs?status=&plant_id=&limit=` | runs, newest first |
+| `GET /orchestrator/runs/{id}` | one run |
+| `POST /orchestrator/runs` `{plant_id}` | queue a run now, outside the schedule (picked up on the next tick) |
+| `GET /orchestrator/schedule` | the schedule in effect, and the next slot |
 
 ## Internal design
 
-Left to the orchestrator owner (event-bus technology, delivery guarantees, job
-runner) within the contracts above.
+```
+src/orchestrator/
+├── api.py       # /orchestrator router
+├── worker.py    # tick() = queue due slots → execute queued runs; OrchestratorLoop
+├── service.py   # schedule arithmetic + the queue (enqueue / claim / finish / reads)
+├── stages.py    # STAGES (order), StageInput, StageSkipped, the stub stage functions
+├── config.py    # load_config() / parse_config() for config/orchestrator.toml
+├── schemas.py   # RunRead / RunCreate / ScheduleRead
+├── models.py    # PipelineRun
+└── db.py        # ORCHESTRATOR_SCHEMA, Base, utcnow(), as_utc(), init_models()
+```
+
+`main_worker.py` is not part of this: it is a separate entrypoint for forcing
+work by hand. `tick()` can be called directly for the same purpose.
+
+## Not done yet
+
+- **Device sync / presentation sync** (the other half of this context) — the
+  device-facing `GET /sync` discussed with `registry`'s device pairing.

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     admin_name: str
     admin_password: str
 
+    # --- orchestrator (pipeline schedule + failure policy, a TOML file) ---
+    orchestrator_config: str = "config/orchestrator.toml"
+
     # --- external LLM (text only — never images; used by `mlops`) ---
     # Where to reach it and how to authenticate — deployment concerns. Which
     # model to run is not one of them: that belongs to the Langfuse prompt
