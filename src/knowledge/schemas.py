@@ -96,7 +96,6 @@ class ProbeRead(BaseModel):
     id: uuid.UUID
     slug: str
     care_need: str
-    crop: str
     priority: int
     is_screening: bool
     question: str
@@ -118,13 +117,51 @@ class ProbeSetSummary(BaseModel):
     generated_at: datetime
     approved_by: str | None
     approved_at: datetime | None
+    rejected_by: str | None
+    rejected_at: datetime | None
     archived_at: datetime | None
+    note: str | None
     is_stale: bool
     probe_count: int
 
 
 class ProbeSetDetail(ProbeSetSummary):
     probes: list[ProbeRead]
+    #: Link to the Langfuse trace of the generation run, for a reviewer who
+    #: wants to see the prompt version and raw output behind these probes.
+    #: ``None`` when the set was not generated through `mlops`.
+    trace_url: str | None = None
+
+
+class ProbeSetRejection(BaseModel):
+    """A reviewer turning a draft down."""
+
+    #: Required. The verdict alone teaches the next prompt version nothing —
+    #: *why* it was wrong is the whole value of a human review.
+    comment: str = Field(min_length=4, max_length=1000)
+
+
+# --------------------------------------------------------------------------- #
+# generation
+# --------------------------------------------------------------------------- #
+
+
+class GenerationOutcomeRead(BaseModel):
+    """What happened to one document in a generation run."""
+
+    document_id: uuid.UUID
+    species_code: str
+    probe_set_id: uuid.UUID | None = None
+    probe_count: int = 0
+    error: str | None = None
+
+
+class GenerationReportRead(BaseModel):
+    """The result of one generation run over the unconverted backlog."""
+
+    considered: int
+    generated: list[GenerationOutcomeRead]
+    failed: list[GenerationOutcomeRead]
 
 
 class SpeciesProbesBundle(BaseModel):

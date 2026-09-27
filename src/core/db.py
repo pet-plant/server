@@ -47,7 +47,8 @@ def get_session() -> Iterator[Session]:
 
 def init_models() -> None:
     """Create the ``auth`` schema and its tables. Interim helper until Alembic."""
-    import core.users.models  # noqa: F401  -- register models on Base.metadata
+    import core.devices.models  # noqa: F401  -- register models on Base.metadata
+    import core.users.models  # noqa: F401
 
     with engine.begin() as conn:
         if conn.dialect.name == "postgresql":

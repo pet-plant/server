@@ -132,8 +132,11 @@ internal operations endpoints. Run under `uvicorn`.
 Runs the batch job that is due **at the moment it is invoked**. It is a
 dispatcher, not a long-lived scheduler: an external scheduler (cron or a systemd
 timer) calls it with the job to run. Jobs include, among others: draining pending
-capture batches through segmentation and alignment, and running the screening
-probe and probe battery. The concrete job catalogue is owned by `orchestrator`.
+capture batches through segmentation and alignment, running the screening
+probe and probe battery, and generating draft probe sets for research documents
+that have none yet (`knowledge.generation.generate_pending` — today it is also
+reachable as `POST /knowledge/probe-sets/generate` for manual runs). The concrete
+job catalogue is owned by `orchestrator`.
 Prompt experiments are not jobs — they are run on demand with
 `python -m mlops.<component>.experiment`.
 
@@ -150,7 +153,7 @@ Prompt experiments are not jobs — they are run on demand with
 | Validation / models | **Pydantic** | fixed |
 | Relational store | **PostgreSQL** | one instance, one schema per context |
 | Object store | **MinIO** | S3-compatible; frames, derived crops, exemplars, evaluation sets |
-| LLMOps | **Langfuse** (self-hosted) | Prompt management, tracing, datasets, scores — see `src/mlops` |
+| LLMOps | **Langfuse** | Prompt management, tracing, datasets, scores — see `src/mlops`. Cloud or self-hosted; `LANGFUSE_HOST` decides |
 | LLM framework | **LangChain** (+ `langchain-openai`) | Chains / agents; v1 bundles `langgraph`. Used only inside `src/mlops` |
 
 Beyond FastAPI / SQLAlchemy / Pydantic, additional libraries are each context's
@@ -241,7 +244,7 @@ contexts reach it over the network using values from `.env`.
 | VLM (probe execution, species ID) | On-prem, served with **vLLM** | OpenAI-compatible HTTP API (`VLM_API_BASE`) | `mlops` (for assessment, registry) |
 | Segmentation model | On-prem | HTTP API (`SEGMENTATION_ENDPOINT`) | capture |
 | LLM (advice, probe generation) | External API, text only | HTTP API (`LLM_API_BASE`) | `mlops` (for advice, knowledge) |
-| Langfuse (prompts, traces, datasets, scores) | Self-hosted | Langfuse SDK | `mlops` — one project **per component**, so one key pair each |
+| Langfuse (prompts, traces, datasets, scores) | Langfuse Cloud or self-hosted (`LANGFUSE_HOST`) | Langfuse SDK | `mlops` — one project **per component**, so one key pair each |
 
 ---
 

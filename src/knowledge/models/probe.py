@@ -79,8 +79,16 @@ class ProbeSet(Base):
     )
     approved_by: Mapped[str | None] = mapped_column(Text)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # A draft a reviewer turned down. Symmetric with the two fields above: the
+    # rejection is as much a record as the approval, and ``note`` says why.
+    rejected_by: Mapped[str | None] = mapped_column(Text)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None] = mapped_column(Text)
+    # The Langfuse trace of the generation run behind this set — the one link
+    # between a row here and the prompt version, model output and repair rounds
+    # that produced it. ``mlops`` keeps no copy of our ids, so this is the join.
+    langfuse_trace_id: Mapped[str | None] = mapped_column(Text)
 
     research_document: Mapped["ResearchDocument"] = relationship(
         back_populates="probe_sets"
@@ -108,7 +116,6 @@ class Probe(Base):
     )
     slug: Mapped[str] = mapped_column(Text, nullable=False)  # 'water_deficit.leaf_droop'
     care_need: Mapped[str] = mapped_column(Text, nullable=False)  # 'water_deficit'
-    crop: Mapped[str] = mapped_column(Text, nullable=False)  # 'whole_plant'
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     is_screening: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)

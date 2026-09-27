@@ -45,6 +45,12 @@ src/core/
     ├── service.py      # create_user / authenticate_user / get_user_by_* / ensure_admin_user
     ├── dependencies.py # oauth2_scheme, get_current_user, get_current_active_user, get_current_superuser, CurrentUser, CurrentSuperuser
     └── api.py          # router: POST /auth/register, POST /auth/token, GET /auth/me
+└── devices/            # edge-device identity — owns auth.devices, auth.device_pairings
+    ├── models.py       # Device (physical_id, owner_id, status, token_hash, …), DevicePairing
+    ├── schemas.py      # PairingStart / PairingApprove / PairingTokenRequest / DeviceToken / DeviceRead
+    ├── service.py      # start_pairing / approve_pairing / exchange_device_code / revoke_device / …
+    ├── dependencies.py # get_current_device, CurrentDevice
+    └── api.py          # router: /devices (pairing, list, revoke, /me)
 ```
 
 ### Auth usage
@@ -70,6 +76,48 @@ settings. Guard admin-only routes with `CurrentSuperuser` (403s non-admins).
 Until per-schema Alembic migrations land, `core.db.init_models()` creates the
 `auth` schema and its tables directly (used by tests; call it once for a local
 run against Postgres).
+
+### Edge devices
+
+A planter pairs with an account once, then **stays signed in** with its own
+long-lived token until the owner revokes it. It never holds the owner's
+password or JWT. Pairing follows the OAuth 2.0 device authorization grant
+(RFC 8628) — the code is read off the device's own display, which is what proves
+the owner has it in hand:
+
+```
+device  POST /devices/pair {physical_id}      → {device_code, user_code "K7QM-4ZPX", expires_in, interval}
+        shows user_code on its display
+owner   POST /devices/pair/approve {user_code} (CurrentUser)  → the device is now theirs
+device  POST /devices/pair/token {device_code} → 400 authorization_pending … then {access_token "ppd_…"}
+device  Authorization: Bearer ppd_…           → CurrentDevice on every device-facing route
+owner   POST /devices/{id}/revoke             → the token is refused from the next request on
+```
+
+| Method & path | Caller | Purpose |
+|---|---|---|
+| `POST /devices/pair` | device (no auth) | open a pairing; any earlier pending one for the device expires |
+| `POST /devices/pair/approve` | owner | claim the device showing `user_code` (404 unknown/expired, 409 active under another account). Re-pairing your own device replaces its token |
+| `POST /devices/pair/token` | device (no auth) | poll; `detail` is `authorization_pending` / `expired_token` / `invalid_grant` (all 400) until approved |
+| `GET /devices/me` | device | the calling device |
+| `GET /devices` | owner | own devices (all for a superuser) |
+| `GET /devices/{id}` | owner | one device (404 for someone else's) |
+| `POST /devices/{id}/revoke` | owner | stop it (idempotent). Pairing again re-enables it |
+
+- Device tokens are opaque (`ppd_` + 256 random bits), stored only as SHA-256
+  and checked against the database on every request, so a revoke takes effect
+  immediately. They have no expiry. `last_seen_at` is updated on each request.
+- A revoked device can be paired by anyone holding it (e.g. passed on to someone
+  else); an active one only by its current owner.
+- Guard device-facing routes with `CurrentDevice`:
+
+  ```python
+  from core.devices import CurrentDevice
+
+  @router.post("/captures")
+  def upload(device: CurrentDevice) -> ...:
+      plant = registry.get_plant_by_device(session, device.physical_id)
+  ```
 
 ### Object storage usage
 

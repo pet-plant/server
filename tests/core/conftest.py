@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from core.db import Base, get_session
+from core.devices import models as device_models  # noqa: F401 - register on Base.metadata
+from core.devices.api import router as devices_router
 from core.users import models as user_models  # noqa: F401 - register on Base.metadata
 from core.users.api import router as auth_router
 
@@ -37,6 +39,7 @@ def session_factory() -> Iterator[sessionmaker[Session]]:
 def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
     app = FastAPI()
     app.include_router(auth_router)
+    app.include_router(devices_router)
 
     def override_get_session() -> Iterator[Session]:
         session = session_factory()
