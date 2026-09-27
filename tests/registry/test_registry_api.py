@@ -1,0 +1,182 @@
+"""``/registry`` HTTP API tests."""
+
+from collections.abc import Callable
+
+import pytest
+from fastapi.testclient import TestClient
+
+from core.users.models import User
+
+ClientAs = Callable[[User], TestClient]
+MISSING = "00000000-0000-0000-0000-000000000000"
+
+
+@pytest.fixture(autouse=True)
+def _species(add_species: Callable[..., None]) -> None:
+    add_species("spath", "pothos")
+
+
+def test_crud_round_trip(client_as: ClientAs, alice: User) -> None:
+    client = client_as(alice)
+    created = client.post(
+        "/registry/plants",
+        json={"name": "Spathi", "species_code": "spath", "device_id": "dev-001"},
+    )
+    assert created.status_code == 201
+    plant = created.json()
+    assert plant["owner_id"] == str(alice.id)
+    assert plant["species_confirmed_at"] is None
+    assert plant["archived_at"] is None
+    plant_id = plant["id"]
+
+    assert client.get(f"/registry/plants/{plant_id}").json()["name"] == "Spathi"
+    assert [p["id"] for p in client.get("/registry/plants").json()] == [plant_id]
+
+    patched = client.patch(
+        f"/registry/plants/{plant_id}", json={"name": "Spathi II", "location": "kitchen"}
+    )
+    assert patched.status_code == 200
+    assert patched.json()["name"] == "Spathi II"
+    assert patched.json()["location"] == "kitchen"
+    assert patched.json()["device_id"] == "dev-001"  # untouched
+
+    assert client.delete(f"/registry/plants/{plant_id}").status_code == 204
+    # archived: gone from the default listing, still resolvable by id
+    assert client.get("/registry/plants").json() == []
+    archived = client.get("/registry/plants", params={"include_archived": True}).json()
+    assert [p["id"] for p in archived] == [plant_id]
+    assert client.get(f"/registry/plants/{plant_id}").json()["archived_at"] is not None
+
+    # an archived plant cannot be changed or archived again
+    assert client.patch(f"/registry/plants/{plant_id}", json={"name": "x"}).status_code == 409
+    assert client.delete(f"/registry/plants/{plant_id}").status_code == 409
+
+
+def test_requires_authentication(client_as: ClientAs, alice: User) -> None:
+    client = client_as(alice)
+    client.app.dependency_overrides.clear()  # type: ignore[attr-defined]
+    assert client.get("/registry/plants").status_code == 401
+
+
+def test_owners_cannot_see_each_others_plants(
+    client_as: ClientAs, alice: User, bob: User
+) -> None:
+    plant_id = client_as(alice).post("/registry/plants", json={"name": "a"}).json()["id"]
+
+    as_bob = client_as(bob)
+    assert as_bob.get("/registry/plants").json() == []
+    # 404, not 403: another owner's id is indistinguishable from a missing one
+    assert as_bob.get(f"/registry/plants/{plant_id}").status_code == 404
+    assert as_bob.patch(f"/registry/plants/{plant_id}", json={"name": "b"}).status_code == 404
+    assert as_bob.delete(f"/registry/plants/{plant_id}").status_code == 404
+    # an owner's owner_id filter cannot widen the listing either
+    assert as_bob.get("/registry/plants", params={"owner_id": str(alice.id)}).json() == []
+
+
+def test_admin_sees_everything_and_registers_for_others(
+    client_as: ClientAs, alice: User, bob: User, admin: User
+) -> None:
+    client_as(alice).post("/registry/plants", json={"name": "a"})
+    client_as(bob).post("/registry/plants", json={"name": "b"})
+
+    as_admin = client_as(admin)
+    assert {p["name"] for p in as_admin.get("/registry/plants").json()} == {"a", "b"}
+    only_bob = as_admin.get("/registry/plants", params={"owner_id": str(bob.id)}).json()
+    assert [p["name"] for p in only_bob] == ["b"]
+
+    created = as_admin.post("/registry/plants", json={"name": "c", "owner_id": str(alice.id)})
+    assert created.status_code == 201
+    assert created.json()["owner_id"] == str(alice.id)
+
+    unknown = as_admin.post("/registry/plants", json={"name": "d", "owner_id": MISSING})
+    assert unknown.status_code == 422
+
+
+def test_owner_cannot_register_for_someone_else(
+    client_as: ClientAs, alice: User, bob: User
+) -> None:
+    response = client_as(alice).post(
+        "/registry/plants", json={"name": "a", "owner_id": str(bob.id)}
+    )
+    assert response.status_code == 403
+
+
+def test_species_must_exist_in_knowledge(client_as: ClientAs, alice: User) -> None:
+    client = client_as(alice)
+    assert client.post(
+        "/registry/plants", json={"name": "a", "species_code": "nope"}
+    ).status_code == 422
+
+    plant_id = client.post("/registry/plants", json={"name": "a"}).json()["id"]
+    assert client.patch(
+        f"/registry/plants/{plant_id}", json={"species_code": "nope"}
+    ).status_code == 422
+
+
+def test_species_confirmation(client_as: ClientAs, alice: User) -> None:
+    client = client_as(alice)
+    plant = client.post(
+        "/registry/plants", json={"name": "a", "species_code": "spath"}
+    ).json()
+    url = f"/registry/plants/{plant['id']}"
+    assert plant["species_confirmed_at"] is None
+
+    confirmed = client.patch(url, json={"species_confirmed": True}).json()
+    assert confirmed["species_confirmed_at"] is not None
+
+    # changing the species drops the confirmation…
+    changed = client.patch(url, json={"species_code": "pothos"}).json()
+    assert changed["species_code"] == "pothos"
+    assert changed["species_confirmed_at"] is None
+
+    # …unless the same request confirms the new one
+    both = client.patch(url, json={"species_code": "spath", "species_confirmed": True}).json()
+    assert both["species_confirmed_at"] is not None
+
+
+def test_device_is_bound_to_one_live_plant(client_as: ClientAs, alice: User) -> None:
+    client = client_as(alice)
+    first = client.post("/registry/plants", json={"name": "a", "device_id": "dev-1"}).json()
+
+    dup = client.post("/registry/plants", json={"name": "b", "device_id": "dev-1"})
+    assert dup.status_code == 409
+
+    second = client.post("/registry/plants", json={"name": "b"}).json()
+    assert client.patch(
+        f"/registry/plants/{second['id']}", json={"device_id": "dev-1"}
+    ).status_code == 409
+    # re-sending a plant's own device is not a conflict
+    assert client.patch(
+        f"/registry/plants/{first['id']}", json={"device_id": "dev-1"}
+    ).status_code == 200
+
+    # archiving frees the device for a new plant
+    client.delete(f"/registry/plants/{first['id']}")
+    rebound = client.patch(f"/registry/plants/{second['id']}", json={"device_id": "dev-1"})
+    assert rebound.status_code == 200
+
+
+def test_unbind_device_with_null(client_as: ClientAs, alice: User) -> None:
+    client = client_as(alice)
+    plant = client.post("/registry/plants", json={"name": "a", "device_id": "dev-1"}).json()
+    unbound = client.patch(f"/registry/plants/{plant['id']}", json={"device_id": None})
+    assert unbound.json()["device_id"] is None
+    assert client.get("/registry/devices/dev-1/plant").status_code == 404
+
+
+def test_device_lookup(client_as: ClientAs, alice: User, bob: User, admin: User) -> None:
+    plant = client_as(alice).post(
+        "/registry/plants", json={"name": "a", "device_id": "dev-1"}
+    ).json()
+
+    assert client_as(alice).get("/registry/devices/dev-1/plant").json()["id"] == plant["id"]
+    assert client_as(admin).get("/registry/devices/dev-1/plant").json()["id"] == plant["id"]
+    assert client_as(bob).get("/registry/devices/dev-1/plant").status_code == 404
+    assert client_as(alice).get("/registry/devices/dev-x/plant").status_code == 404
+
+
+def test_missing_plant_returns_404(client_as: ClientAs, admin: User) -> None:
+    client = client_as(admin)
+    assert client.get(f"/registry/plants/{MISSING}").status_code == 404
+    assert client.patch(f"/registry/plants/{MISSING}", json={"name": "x"}).status_code == 404
+    assert client.delete(f"/registry/plants/{MISSING}").status_code == 404

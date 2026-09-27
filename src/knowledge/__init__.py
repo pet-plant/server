@@ -17,11 +17,13 @@ Public surface:
 - :func:`get_species_probes` — in-process interface: ``species_code`` →
   approved probes + actions as a JSON-serialisable Pydantic model, for
   ``assessment`` and ``advice``.
+- :func:`get_species` — in-process interface: ``species_code`` → catalogue
+  entry (or ``None``), for ``registry``.
 
 The LLM generation logic is not implemented yet.
 """
 
 from knowledge.api import router
-from knowledge.interface import get_species_probes
+from knowledge.interface import get_species, get_species_probes
 
-__all__ = ["get_species_probes", "router"]
+__all__ = ["get_species", "get_species_probes", "router"]
