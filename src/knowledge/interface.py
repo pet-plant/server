@@ -2,13 +2,15 @@
 
 ``assessment`` needs the probe definitions and ``advice`` needs the actions;
 both call :func:`get_species_probes` instead of reaching into the ``knowledge``
-schema. The return value is a Pydantic model that serialises straight to JSON
+schema. ``registry`` calls :func:`get_species` to check a plant's species code.
+Return values are Pydantic models that serialise straight to JSON
 (``bundle.model_dump(mode="json")``).
 """
 
 from sqlalchemy.orm import Session
 
-from knowledge.schemas import ProbeRead, SpeciesProbesBundle
+from knowledge.models import Species
+from knowledge.schemas import ProbeRead, SpeciesProbesBundle, SpeciesRead
 from knowledge.service import get_approved_probe_set, is_probe_set_stale
 
 
@@ -31,3 +33,9 @@ def get_species_probes(
         generated_at=probe_set.generated_at,
         probes=[ProbeRead.model_validate(p) for p in probe_set.probes],
     )
+
+
+def get_species(session: Session, species_code: str) -> SpeciesRead | None:
+    """The catalogue entry for ``species_code``, or ``None`` if it is unknown."""
+    species = session.get(Species, species_code)
+    return None if species is None else SpeciesRead.model_validate(species)
