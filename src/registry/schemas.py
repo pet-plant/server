@@ -17,7 +17,6 @@ class PlantCreate(BaseModel):
     #: The owner vouches for ``species_code`` (e.g. picked it themselves).
     species_confirmed: bool = False
     device_id: str | None = Field(default=None, min_length=1, max_length=128)
-    location: str | None = Field(default=None, max_length=200)
     note: str | None = Field(default=None, max_length=1000)
     #: Admin only: register the plant on someone else's behalf. Owners always
     #: register for themselves.
@@ -27,15 +26,14 @@ class PlantCreate(BaseModel):
 class PlantUpdate(BaseModel):
     """Partial update: only the fields present in the request are applied.
 
-    Sending ``null`` for ``species_code`` / ``device_id`` / ``location`` /
-    ``note`` clears it (``device_id: null`` unbinds the device).
+    Sending ``null`` for ``species_code`` / ``device_id`` / ``note`` clears it
+    (``device_id: null`` unbinds the device).
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
     species_code: str | None = Field(default=None, min_length=1, max_length=64)
     species_confirmed: bool | None = None
     device_id: str | None = Field(default=None, min_length=1, max_length=128)
-    location: str | None = Field(default=None, max_length=200)
     note: str | None = Field(default=None, max_length=1000)
 
 
@@ -50,7 +48,6 @@ class PlantRead(BaseModel):
     species_code: str | None
     species_confirmed_at: datetime | None
     device_id: str | None
-    location: str | None
     note: str | None
     created_at: datetime
     updated_at: datetime

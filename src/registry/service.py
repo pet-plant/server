@@ -174,7 +174,6 @@ def create_plant(session: Session, data: PlantCreate, *, owner_id: uuid.UUID) ->
             utcnow() if data.species_confirmed and data.species_code else None
         ),
         device_id=data.device_id,
-        location=data.location,
         note=data.note,
     )
     session.add(plant)

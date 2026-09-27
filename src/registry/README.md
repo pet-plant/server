@@ -28,7 +28,6 @@ plant is which.
 | `species_code` | text, nullable | `knowledge.species.species_code`. Not a DB foreign key — checked via `knowledge.get_species`. `NULL` until resolved |
 | `species_confirmed_at` | timestamptz, nullable | Set when the owner confirms the species; cleared when the species changes |
 | `device_id` | text, nullable | `auth.devices.physical_id` (`core`) of the planter that photographs it. Must be a device **paired to the plant's owner** — checked via `core.devices` |
-| `location` | text, nullable | Free-text placement |
 | `note` | text, nullable | |
 | `created_at` / `updated_at` | timestamptz | |
 | `archived_at` | timestamptz, nullable | Set instead of deleting — see below |
@@ -101,7 +100,7 @@ from registry import (
 
 plant = get_plant(session, plant_id)
 plant.model_dump(mode="json")  # -> {id, owner_id, name, species_code, species_confirmed_at,
-                               #     device_id, location, note, created_at, updated_at, archived_at}
+                               #     device_id, note, created_at, updated_at, archived_at}
 ```
 
 - `capture` guards its upload route with `core.devices.CurrentDevice` and resolves

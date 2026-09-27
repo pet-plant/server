@@ -54,8 +54,6 @@ class Plant(Base):
     species_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Physical id of the planter / camera that photographs this plant.
     device_id: Mapped[str | None] = mapped_column(Text)
-    # Free-text placement ("living room, south window").
-    location: Mapped[str | None] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False

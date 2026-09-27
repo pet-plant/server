@@ -40,11 +40,11 @@ def test_crud_round_trip(client_as: ClientAs, alice: User, alice_device: Device)
     assert [p["id"] for p in client.get("/registry/plants").json()] == [plant_id]
 
     patched = client.patch(
-        f"/registry/plants/{plant_id}", json={"name": "Spathi II", "location": "kitchen"}
+        f"/registry/plants/{plant_id}", json={"name": "Spathi II", "note": "kitchen"}
     )
     assert patched.status_code == 200
     assert patched.json()["name"] == "Spathi II"
-    assert patched.json()["location"] == "kitchen"
+    assert patched.json()["note"] == "kitchen"
     assert patched.json()["device_id"] == "dev-1"  # untouched
 
     assert client.delete(f"/registry/plants/{plant_id}").status_code == 204
