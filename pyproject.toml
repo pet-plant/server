@@ -58,6 +58,7 @@ known-first-party = [
     "assessment",
     "advice",
     "companion",
+    "action",
     "mlops",
 ]
 

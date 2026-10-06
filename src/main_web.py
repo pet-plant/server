@@ -15,6 +15,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from action import router as action_router
+from action.db import init_models as init_action_models
 from core.api import router as health_router
 from core.db import SessionLocal, init_models
 from core.devices import router as devices_router
@@ -38,6 +40,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     init_knowledge_models()
     init_registry_models()
     init_orchestrator_models()
+    init_action_models()
     # Seed / reconcile the bootstrap admin from ADMIN_* settings.
     with SessionLocal() as session:
         ensure_admin_user(session)
@@ -65,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router)
     app.include_router(registry_router)
     app.include_router(orchestrator_router)
+    app.include_router(action_router)
 
     return app
 
