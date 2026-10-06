@@ -53,6 +53,31 @@ class WateredCreate(_CareEventBase):
 CareEventCreate = Annotated[ActionCompletedCreate | WateredCreate, Field(discriminator="type")]
 
 
+class CompletedAction(BaseModel):
+    """One step of a care plan, as first marked done."""
+
+    action_id: str
+    action_type: str | None
+    completed_at: datetime
+    event_id: uuid.UUID
+
+
+class CarePlanProgress(BaseModel):
+    """How far the owner has got through one care plan.
+
+    ``action`` does not know the plan's full list of steps (``companion``
+    does), so the steps not listed in ``completed_actions`` are the ones
+    still to do.
+    """
+
+    plant_id: uuid.UUID
+    care_plan_id: str
+    #: Each completed step once, in the order they were done.
+    completed_actions: list[CompletedAction]
+    #: The plant's latest watering, from a care card or not.
+    last_watered_at: datetime | None
+
+
 class CareEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

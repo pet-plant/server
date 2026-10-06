@@ -10,6 +10,7 @@
 - Append one event per button press in the GUI.
 - Accept a watering whether or not the plant has a problem (no care plan needed).
 - Deduplicate a retried press (`client_event_id`).
+- Tell the GUI which steps of a care plan are done, and when the plant was last watered.
 
 ## Data it owns
 
@@ -45,8 +46,10 @@
 |---|---|---|
 | `POST /action/plants/{plant_id}/events` | owner (`CurrentUser`) | record an event. 404 for another owner's / unknown plant, 409 for an archived plant |
 | `POST /action/devices/me/events` | device (`CurrentDevice`) | record an event for the plant bound to the device. 404 if none |
+| `GET /action/plants/{plant_id}/care-plans/{care_plan_id}/progress` | owner | the care plan's completed steps + the plant's `last_watered_at`. Readable for archived plants too |
+| `GET /action/devices/me/care-plans/{care_plan_id}/progress` | device | same, for the plant bound to the device |
 
-Both answer **201** with the new event, or **200** with the earlier one when
+The `POST`s answer **201** with the new event, or **200** with the earlier one when
 `client_event_id` was already recorded for the plant. Request body, by `type`:
 
 ```json
@@ -58,13 +61,34 @@ Both answer **201** with the new event, or **200** with the earlier one when
 {"type": "watered", "care_plan_id": null, "occurred_at": null, "client_event_id": "…", "details": {"amount_ml": 200}}
 ```
 
+Progress lists each completed step once (its first completion), oldest first.
+`action` does not know a plan's full list of steps — `companion` does — so the
+client treats the `care_plan.actions[]` ids not listed as still to do.
+
+## Published interface (in-process)
+
+```python
+from action import (
+    list_care_events,  # (session, plant_id, *, since=, event_types=, limit=) -> list[CareEventRead]
+    CareEventRead,
+    CareEventType,     # ACTION_COMPLETED | WATERED
+)
+
+events = list_care_events(session, plant_id, since=week_ago, limit=50)
+[e.model_dump(mode="json") for e in events]  # oldest first, same fields as the HTTP response
+```
+
+- `advice` reads what the owner has done for a plant (completed steps, waterings)
+  before writing new advice.
+
 ## Internal design
 
 ```
 src/action/
 ├── api.py         # /action router — access checks, status codes
-├── service.py     # record_event (append + dedup)
-├── schemas.py     # request union by `type`, CareEventRead
+├── interface.py   # the in-process interface above
+├── service.py     # record_event (append + dedup), list_events, get_care_plan_progress, last_watered_at
+├── schemas.py     # request union by `type`, CareEventRead, CarePlanProgress
 ├── models.py      # CareEvent
 └── db.py          # ACTION_SCHEMA, Base (own MetaData), utcnow(), init_models()
 ```

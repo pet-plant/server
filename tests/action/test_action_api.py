@@ -164,3 +164,92 @@ def test_unbound_device_gets_404(
     device = add_device(alice, "dev-1")
     res = client_as(device).post("/action/devices/me/events", json={"type": "watered"})
     assert res.status_code == 404
+
+
+def _at(hour: int) -> str:
+    return datetime(2026, 9, 22, hour, tzinfo=UTC).isoformat()
+
+
+def _as_utc(value: str) -> datetime:
+    """SQLite hands timestamps back naive; they were written as UTC."""
+    parsed = datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def test_care_plan_progress(
+    client_as: ClientAs, alice: User, add_plant: Callable[..., Plant]
+) -> None:
+    plant = add_plant(alice)
+    client = client_as(alice)
+    events = f"/action/plants/{plant.id}/events"
+    progress = f"/action/plants/{plant.id}/care-plans/cp_1/progress"
+
+    empty = client.get(progress)
+    assert empty.status_code == 200
+    assert empty.json() == {
+        "plant_id": str(plant.id),
+        "care_plan_id": "cp_1",
+        "completed_actions": [],
+        "last_watered_at": None,
+    }
+
+    def complete(action_id: str, hour: int, care_plan_id: str = "cp_1") -> None:
+        res = client.post(
+            events,
+            json={
+                "type": "action_completed",
+                "care_plan_id": care_plan_id,
+                "action_id": action_id,
+                "action_type": "inspect",
+                "occurred_at": _at(hour),
+            },
+        )
+        assert res.status_code == 201
+
+    complete("act_b", 9)
+    complete("act_a", 10)
+    complete("act_b", 11)  # pressed again: still counts once, at its first time
+    complete("act_c", 12, care_plan_id="cp_other")  # another plan
+    client.post(events, json={"type": "watered", "occurred_at": _at(8)})
+    client.post(events, json={"type": "watered", "occurred_at": _at(7)})  # entered late
+
+    body = client.get(progress).json()
+    done = body["completed_actions"]
+    assert [a["action_id"] for a in done] == ["act_b", "act_a"]
+    assert _as_utc(done[0]["completed_at"]) == datetime.fromisoformat(_at(9))
+    assert done[0]["action_type"] == "inspect"
+    assert _as_utc(body["last_watered_at"]) == datetime.fromisoformat(_at(8))
+
+
+def test_care_plan_progress_access(
+    client_as: ClientAs, alice: User, bob: User, add_plant: Callable[..., Plant]
+) -> None:
+    plant = add_plant(alice)
+    assert (
+        client_as(bob).get(f"/action/plants/{plant.id}/care-plans/cp_1/progress").status_code == 404
+    )
+    missing = client_as(alice).get(f"/action/plants/{MISSING}/care-plans/cp_1/progress")
+    assert missing.status_code == 404
+
+    # an archived plant's history stays readable
+    archived = add_plant(alice, archived=True)
+    res = client_as(alice).get(f"/action/plants/{archived.id}/care-plans/cp_1/progress")
+    assert res.status_code == 200
+
+
+def test_device_care_plan_progress(
+    client_as: ClientAs,
+    alice: User,
+    add_plant: Callable[..., Plant],
+    add_device: Callable[..., Device],
+) -> None:
+    device = add_device(alice, "dev-1")
+    unbound = client_as(device).get("/action/devices/me/care-plans/cp_1/progress")
+    assert unbound.status_code == 404
+
+    plant = add_plant(alice, device_id="dev-1")
+    client = client_as(device)
+    client.post("/action/devices/me/events", json=COMPLETED)
+    body = client.get(f"/action/devices/me/care-plans/{COMPLETED['care_plan_id']}/progress").json()
+    assert body["plant_id"] == str(plant.id)
+    assert [a["action_id"] for a in body["completed_actions"]] == [COMPLETED["action_id"]]

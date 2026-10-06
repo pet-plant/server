@@ -5,15 +5,22 @@ received: that context publishes no interface to check them against yet.
 """
 
 import uuid
-from datetime import timedelta
+from collections.abc import Collection
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from action.db import utcnow
 from action.models import CareEvent
-from action.schemas import ActionCompletedCreate, CareEventCreate
+from action.schemas import (
+    ActionCompletedCreate,
+    CareEventCreate,
+    CareEventType,
+    CarePlanProgress,
+    CompletedAction,
+)
 
 #: How far ahead of the server clock ``occurred_at`` may be (client clock skew).
 MAX_CLOCK_SKEW = timedelta(minutes=5)
@@ -31,6 +38,76 @@ def _get_by_client_event_id(
             CareEvent.plant_id == plant_id, CareEvent.client_event_id == client_event_id
         )
     ).one_or_none()
+
+
+# --------------------------------------------------------------------------- #
+# reads
+# --------------------------------------------------------------------------- #
+
+
+def list_events(
+    session: Session,
+    plant_id: uuid.UUID,
+    *,
+    since: datetime | None = None,
+    event_types: Collection[CareEventType] | None = None,
+    limit: int | None = None,
+) -> list[CareEvent]:
+    """The plant's events, oldest first; with ``limit``, only the most recent ones."""
+    stmt = select(CareEvent).where(CareEvent.plant_id == plant_id)
+    if since is not None:
+        stmt = stmt.where(CareEvent.occurred_at >= since)
+    if event_types is not None:
+        stmt = stmt.where(CareEvent.event_type.in_(list(event_types)))
+    stmt = stmt.order_by(CareEvent.occurred_at.desc(), CareEvent.recorded_at.desc())
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(reversed(session.scalars(stmt).all()))
+
+
+def last_watered_at(session: Session, plant_id: uuid.UUID) -> datetime | None:
+    """When the plant was last watered, or ``None`` if never recorded."""
+    return session.scalar(
+        select(func.max(CareEvent.occurred_at)).where(
+            CareEvent.plant_id == plant_id,
+            CareEvent.event_type == CareEventType.WATERED,
+        )
+    )
+
+
+def get_care_plan_progress(
+    session: Session, plant_id: uuid.UUID, care_plan_id: str
+) -> CarePlanProgress:
+    """The steps of ``care_plan_id`` done so far; a step pressed twice counts once."""
+    events = session.scalars(
+        select(CareEvent)
+        .where(
+            CareEvent.plant_id == plant_id,
+            CareEvent.care_plan_id == care_plan_id,
+            CareEvent.event_type == CareEventType.ACTION_COMPLETED,
+        )
+        .order_by(CareEvent.occurred_at, CareEvent.recorded_at)
+    ).all()
+    first_by_action: dict[str, CompletedAction] = {}
+    for event in events:
+        if event.action_id is not None and event.action_id not in first_by_action:
+            first_by_action[event.action_id] = CompletedAction(
+                action_id=event.action_id,
+                action_type=event.action_type,
+                completed_at=event.occurred_at,
+                event_id=event.id,
+            )
+    return CarePlanProgress(
+        plant_id=plant_id,
+        care_plan_id=care_plan_id,
+        completed_actions=list(first_by_action.values()),
+        last_watered_at=last_watered_at(session, plant_id),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# writes
+# --------------------------------------------------------------------------- #
 
 
 def record_event(
