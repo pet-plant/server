@@ -169,3 +169,45 @@ When adding or editing any code in `src/api/`, you must verify:
    - `uv run pytest` -> 100% passing tests (zero regressions across all suites).
    - `uv run ruff check` -> 0 lint or formatting errors (max line length 100).
    - `uv run mypy src` -> 0 static typing issues across all source files.
+
+---
+
+## 5. Companion API Scenarios Testing Guide
+
+### 5.1 Target Audience & When to Use
+- **👤 For Humans (Engineers & Reviewers)**:
+  - Run `scripts/seed_companion_scenarios.py` to seed real states into your local database.
+  - Open **Postman Desktop** and run the collection runner interactively to visually inspect response schemas and status badges.
+  - Run the `curl` commands to test hardware edge token vs mobile user JWT simulation.
+  - Run `--clean` afterwards to reset your database.
+- **🤖 For AI Agents & Automated CI**:
+  - Run `uv run pytest tests/api/test_companion_state.py` for headless unit/integration assertions.
+  - Run `uv run ruff check` and `uv run mypy src` before committing code to ensure zero lint or typing regressions.
+  - Use `scripts/seed_companion_scenarios.py` + `--clean` only in end-to-end integration environments with a live database.
+
+### 5.2 Seeding & Running Tests
+1. **Seed test data** (creates test user and plants for all 3 scenarios):
+   ```bash
+   uv run python scripts/seed_companion_scenarios.py
+   ```
+2. **Execute tests**:
+   - **Scenario 1 (Steady / `NO_ACTION`)**:
+     ```bash
+     curl -s -H "Authorization: Bearer ppd_steady_device_token_secret_123" http://localhost:8000/companion/devices/me/state | jq .
+     ```
+   - **Scenario 2 (Action Needed / `CARE_ADVICE_REQUIRED`)**:
+     ```bash
+     curl -s -H "Authorization: Bearer ppd_care_device_token_secret_456" http://localhost:8000/companion/devices/me/state | jq .
+     ```
+   - **Scenario 3 (Photo Retake / `REQUEST_MORE_INFORMATION`)**:
+     ```bash
+     curl -s -H "Authorization: Bearer ppd_retake_device_token_secret_789" http://localhost:8000/companion/devices/me/state | jq .
+     ```
+3. **Run Postman suite**:
+   - Import `tests/postman/Pet_Plant_Companion_State_API.postman_collection.json`.
+   - Run Section 3 to validate all scenarios automatically.
+4. **Clean up test data (Zero leftover DB garbage)**:
+   ```bash
+   uv run python scripts/seed_companion_scenarios.py --clean
+   ```
+
