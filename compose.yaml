@@ -14,7 +14,7 @@ name: pet-plant
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16-alpine
     environment:
       POSTGRES_USER: petplant
       POSTGRES_PASSWORD: petplant
@@ -79,6 +79,8 @@ services:
       minio:
         condition: service_healthy
       createbuckets:
+        condition: service_completed_successfully
+      migrate:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]

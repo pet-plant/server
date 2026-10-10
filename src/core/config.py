@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # Where to reach it and how to authenticate — deployment concerns. Which
     # model to run is not one of them: that belongs to the Langfuse prompt
     # version's `config`, so it is versioned with the text it was tuned against.
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2:latest"
     llm_api_base: str = ""
     llm_api_key: str = ""
 
@@ -75,6 +79,9 @@ class Settings(BaseSettings):
     langfuse_knowledge_secret_key: str = ""
     langfuse_registry_public_key: str = ""
     langfuse_registry_secret_key: str = ""
+    langfuse_companion_public_key: str = ""
+    langfuse_companion_secret_key: str = ""
+    confidence_threshold: float = 0.5
 
 
 @lru_cache

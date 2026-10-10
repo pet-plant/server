@@ -7,6 +7,7 @@ Return values are Pydantic models that serialise straight to JSON
 (``bundle.model_dump(mode="json")``).
 """
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from knowledge.models import Species
@@ -17,11 +18,7 @@ from knowledge.service import get_approved_probe_set, is_probe_set_stale
 def get_species_probes(
     session: Session, species_code: str
 ) -> SpeciesProbesBundle | None:
-    """The approved probes + actions for ``species_code``.
-
-    Returns ``None`` when the species has no approved probe set yet. At most one
-    set per species is ever approved, so there is nothing to choose between.
-    """
+    """The approved probes + actions for ``species_code``."""
     probe_set = get_approved_probe_set(session, species_code)
     if probe_set is None:
         return None
@@ -39,3 +36,38 @@ def get_species(session: Session, species_code: str) -> SpeciesRead | None:
     """The catalogue entry for ``species_code``, or ``None`` if it is unknown."""
     species = session.get(Species, species_code)
     return None if species is None else SpeciesRead.model_validate(species)
+
+
+def get_care_knowledge(
+    session: Session,
+    species_code: str,
+    query_vector: list[float] | None = None,
+    *,
+    limit: int = 4,
+    max_chars: int = 2500,
+) -> str | None:
+    """Botanical knowledge text for the species used by Care Advisor RAG."""
+    from knowledge.models.chunk import KnowledgeChunk
+    from knowledge.models.document import ResearchDocument
+
+    try:
+        stmt = select(KnowledgeChunk).where(KnowledgeChunk.species_code == species_code)
+        if query_vector is not None and KnowledgeChunk.embedding is not None:
+            stmt = stmt.order_by(KnowledgeChunk.embedding.cosine_distance(query_vector))
+        stmt = stmt.limit(limit)
+        chunks = list(session.scalars(stmt).all())
+        if chunks:
+            parts = [f"### {c.topic}\n{c.content}" for c in chunks]
+            return "\n\n".join(parts)[:max_chars]
+    except Exception:
+        pass
+
+    doc_stmt = select(ResearchDocument).where(
+        ResearchDocument.species_code == species_code,
+        ResearchDocument.status == "active",
+    )
+    doc = session.scalars(doc_stmt).first()
+    if doc and doc.body:
+        return doc.body[:max_chars]
+
+    return None

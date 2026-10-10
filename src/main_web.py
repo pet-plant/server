@@ -17,6 +17,9 @@ from fastapi import FastAPI
 
 from action import router as action_router
 from action.db import init_models as init_action_models
+from advice.db import init_models as init_advice_models
+from assessment.db import init_models as init_assessment_models
+from companion.db import init_models as init_companion_models
 from core.api import router as health_router
 from core.db import SessionLocal, init_models
 from core.devices import router as devices_router
@@ -33,14 +36,16 @@ from registry.db import init_models as init_registry_models
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    # Interim: create the `auth` schema + tables on startup until per-schema
-    # Alembic migrations land (see `core` README / the `migrate` service in
-    # compose.yaml).
+    # Interim: create schema tables on startup until per-schema
+    # Alembic migrations land across all deployments.
     init_models()
     init_knowledge_models()
     init_registry_models()
     init_orchestrator_models()
     init_action_models()
+    init_assessment_models()
+    init_advice_models()
+    init_companion_models()
     # Seed / reconcile the bootstrap admin from ADMIN_* settings.
     with SessionLocal() as session:
         ensure_admin_user(session)
