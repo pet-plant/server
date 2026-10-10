@@ -26,3 +26,15 @@ Thumbs.db
 
 # Logs / local artifacts
 *.log
+
+/images/raw/
+/images/processed/
+
+# Local VLM model artifacts
+/src/assessment/models/
+/src/assessment/models/internvl3_5-2b/
+/src/assessment/models/**/*.safetensors
+/src/assessment/models/**/*.bin
+/src/assessment/models/**/*.pt
+/src/assessment/models/**/*.pth
+/src/assessment/models/**/*.onnx
