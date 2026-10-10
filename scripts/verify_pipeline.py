@@ -73,7 +73,7 @@ def main() -> None:
         user_id = uuid.uuid4()
         now = datetime.now(UTC)
 
-        print(f"\n[Step 0] Registering Plant & Ingesting Unhealthy Visual Observation...")
+        print("\n[Step 0] Registering Plant & Ingesting Unhealthy Visual Observation...")
         plant = Plant(
             id=plant_id,
             owner_id=user_id,
@@ -136,7 +136,10 @@ def main() -> None:
         ).all()
         assert len(actions) > 0, "No actions saved to care_plan_action table!"
         for a in actions:
-            print(f"  ✓ [Action Row] ID: {a.action_id} | Priority: {a.priority} | Type: {a.action_type}")
+            print(
+                f"  ✓ [Action Row] ID: {a.action_id} | "
+                f"Priority: {a.priority} | Type: {a.action_type}"
+            )
             print(f"    Label: \"{a.label}\" | Description: \"{a.action}\"")
 
         print("\n[Step 5] Validating Companion Stage (First-Person Plant Persona Dialogue):")
@@ -162,7 +165,7 @@ def main() -> None:
         session.add(event)
         session.commit()
         print(f"  ✓ User clicked: \"{completed_act.label}\" ({completed_act.action_id})")
-        print(f"  ✓ Row committed to action.care_event table (event_type='action_completed')")
+        print("  ✓ Row committed to action.care_event table (event_type='action_completed')")
 
         print("\n" + "=" * 60)
         print(" ALL LOGIC VERIFIED AND WORKING CORRECTLY! ")

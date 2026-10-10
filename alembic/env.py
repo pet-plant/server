@@ -8,12 +8,24 @@ from sqlalchemy import engine_from_config, pool
 # Add 'src' to python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from core.config import get_settings
-import core.db
-import registry.db
-import knowledge.db
 import action.db
+import action.models  # noqa: F401
+import advice.db
+import advice.models  # noqa: F401
+import assessment.db
+import assessment.models  # noqa: F401
+import companion.db
+import companion.models  # noqa: F401
+import core.db
+import core.devices.models  # noqa: F401
+import core.users.models  # noqa: F401
+import knowledge.db
+import knowledge.models  # noqa: F401
 import orchestrator.db
+import orchestrator.models  # noqa: F401
+import registry.db
+import registry.models  # noqa: F401
+from core.config import get_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -37,6 +49,9 @@ target_metadata = [
     knowledge.db.Base.metadata,
     action.db.Base.metadata,
     orchestrator.db.Base.metadata,
+    assessment.db.Base.metadata,
+    advice.db.Base.metadata,
+    companion.db.Base.metadata,
 ]
 
 # Track which schemas we manage

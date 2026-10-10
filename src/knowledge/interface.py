@@ -7,12 +7,16 @@ Return values are Pydantic models that serialise straight to JSON
 (``bundle.model_dump(mode="json")``).
 """
 
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from knowledge.models import Species
 from knowledge.schemas import ProbeRead, SpeciesProbesBundle, SpeciesRead
 from knowledge.service import get_approved_probe_set, is_probe_set_stale
+
+logger = logging.getLogger(__name__)
 
 
 def get_species_probes(
@@ -60,7 +64,11 @@ def get_care_knowledge(
             parts = [f"### {c.topic}\n{c.content}" for c in chunks]
             return "\n\n".join(parts)[:max_chars]
     except Exception:
-        pass
+        logger.warning(
+            "Vector chunk retrieval failed for species=%s, falling back to document",
+            species_code,
+            exc_info=True,
+        )
 
     doc_stmt = select(ResearchDocument).where(
         ResearchDocument.species_code == species_code,

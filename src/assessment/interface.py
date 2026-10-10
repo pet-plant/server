@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from assessment.models import Observation, PlantMilestone, TriggerResultRecord
@@ -130,3 +130,14 @@ def update_companion_message(
     if obs:
         obs.companion_message = message
         session.commit()
+
+
+def count_observations(session: Session, plant_id: uuid.UUID) -> int:
+    """Retrieve total observation count for a plant (used for dayCount calculation)."""
+    stmt = (
+        select(func.count())
+        .select_from(Observation)
+        .where(Observation.plant_id == plant_id)
+    )
+    return session.scalar(stmt) or 0
+

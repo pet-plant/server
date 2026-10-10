@@ -45,6 +45,7 @@ package = false
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = ["fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

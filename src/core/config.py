@@ -12,6 +12,7 @@ Every context imports :func:`get_settings` rather than reading ``os.environ``.
 
 from functools import lru_cache
 
+from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     # --- app ---
     app_env: str
     log_level: str
+    cors_origins: str = "*"
 
     # --- PostgreSQL ---
     database_url: str
@@ -46,6 +48,17 @@ class Settings(BaseSettings):
     jwt_alg: str
     jwt_secret: str
     access_token_ttl_seconds: int
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def validate_jwt_secret(cls, v: str, info: ValidationInfo) -> str:
+        app_env = str(info.data.get("app_env", "local")).lower()
+        if app_env in ("staging", "prod", "production"):
+            if v == "change-me" or len(v.encode("utf-8")) < 32:
+                raise ValueError(
+                    "JWT_SECRET must be at least 32 bytes and cannot be 'change-me' in staging/prod"
+                )
+        return v
 
     # --- auth: bootstrap admin (seeded on startup by core.users.ensure_admin_user) ---
     admin_email: str

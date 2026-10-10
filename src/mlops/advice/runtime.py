@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -11,6 +12,8 @@ from pydantic import BaseModel, Field
 
 from mlops.client import get_callback_handler, is_configured
 from mlops.settings import PRODUCTION_LABEL, Component
+
+logger = logging.getLogger(__name__)
 
 
 class GeneratedCareAction(BaseModel):
@@ -115,7 +118,7 @@ def generate_advice(
         try:
             callbacks.append(get_callback_handler(Component.ADVICE))
         except Exception:
-            pass
+            logger.warning("Failed to initialise Langfuse callback for advice", exc_info=True)
 
     # Build prompt inputs
     symptoms_text = json.dumps(payload.symptoms)

@@ -5,13 +5,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fixtures.mock_llm_for_llm_pipeline_integration.test_scenarios import SCENARIOS, run_scenario
+from fixtures.mock_llm_for_llm_pipeline_integration.test_scenarios import (  # noqa: E402
+    SCENARIOS,
+    run_scenario,
+)
 
 
 @pytest.mark.parametrize("scenario_name", list(SCENARIOS.keys()))
@@ -26,7 +30,10 @@ def test_all_scenarios_mock_execution(scenario_name: str) -> None:
 
 @pytest.mark.parametrize("scenario_name", list(SCENARIOS.keys()))
 def test_scenario_frontend_response_contract(scenario_name: str) -> None:
-    """Verify that every scenario generates a valid Frontend Response Envelope identical to poc-ai-agent."""
+    """Verify that every scenario generates a valid Frontend Response Envelope.
+
+    Contract must be identical to poc-ai-agent.
+    """
     spec = SCENARIOS[scenario_name]
     result = run_scenario(scenario_name, spec, live_llm=False, verbose=False)
 
