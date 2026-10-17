@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     llm_api_base: str = ""
     llm_api_key: str = ""
 
+    # Passage embeddings. A blank provider follows ``llm_provider``. An empty
+    # OpenAI key delegates to Ollama, the same way chat does. The model id is
+    # whatever ``EMBEDDING_MODEL`` names for that provider.
+    embedding_provider: str = ""
+    embedding_model: str = ""
+
     # --- VLM (images; used by `mlops.assessment`) ---
     # "local" runs transformers in-process from `vlm_local_model_path`; "vllm"
     # calls an OpenAI-compatible server at `vlm_api_base`. As with the LLM, no

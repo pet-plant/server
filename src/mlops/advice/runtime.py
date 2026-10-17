@@ -262,10 +262,10 @@ class AdviceConfig:
     """Model hyper-parameters, read from the Langfuse prompt version's ``config``.
 
     ``model`` is optional here, unlike ``knowledge`` and ``assessment``: advice
-    reaches its model through :func:`mlops.factory.get_llm`, where the deployment
-    picks the provider (``LLM_PROVIDER=openai|ollama``) and a model id only means
-    something to one of them. A version that names ``model`` pins it; one that
-    does not runs on the provider's default model.
+    reaches its model through :func:`mlops.factory.get_llm`. OpenAI runs when
+    ``LLM_API_KEY`` is set; an empty key, or an OpenAI call that cannot be
+    completed, delegates to Ollama. A version that names ``model`` pins the
+    OpenAI id. The Ollama delegate uses ``OLLAMA_MODEL``.
     """
 
     model: str | None = None

@@ -1,0 +1,9 @@
+# NVIDIA GPU passthrough for the web service. Compose this over compose.yaml:
+#
+#   docker compose -f compose.yaml -f compose.gpu.yaml up --build
+#
+# Omit this file on machines without an NVIDIA GPU (including Docker Desktop
+# on a Mac). The local VLM then uses CPU inside the container.
+services:
+  web:
+    gpus: all

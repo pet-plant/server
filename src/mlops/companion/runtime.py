@@ -40,9 +40,10 @@ COMPONENT: Final = Component.COMPANION
 class CompanionConfig:
     """Hyper-parameters and tones, read from the Langfuse prompt version's ``config``.
 
-    ``model`` is optional for the same reason as in ``advice``: the deployment
-    picks the provider (``LLM_PROVIDER``) through :func:`mlops.factory.get_llm`.
-    A version without ``tones`` / ``default_tone`` uses the bootstrap ones.
+    ``model`` is optional for the same reason as in ``advice``: chat goes through
+    :func:`mlops.factory.get_llm`, which uses OpenAI when ``LLM_API_KEY`` is set
+    and delegates to Ollama when OpenAI is unavailable. A version without
+    ``tones`` / ``default_tone`` uses the bootstrap ones.
     """
 
     model: str | None = None

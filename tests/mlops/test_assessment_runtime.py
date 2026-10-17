@@ -9,8 +9,10 @@ every way the dependencies can be missing surfaces as one error type.
 import dataclasses
 import importlib.util
 import json
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -665,8 +667,77 @@ def test_vlm_provider_selects_the_backend(
     provider: str, expected: type, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(backends, "get_settings", lambda: settings(vlm_provider=provider))
+    monkeypatch.setattr(backends, "_cuda_available", lambda: False)
+    monkeypatch.setattr(backends, "_mlx_metal_available", lambda: False)
 
     assert isinstance(backends.get_vlm_backend(), expected)
+
+
+def test_local_runtime_prefers_cuda_then_mlx_then_cpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    hf = tmp_path / "internvl3_5-2b"
+    mlx = tmp_path / "internvl3_5-2b-mlx"
+    hf.mkdir()
+    monkeypatch.setattr(
+        backends,
+        "get_settings",
+        lambda: settings(vlm_provider="local", vlm_local_model_path=str(hf)),
+    )
+
+    monkeypatch.setattr(backends, "_cuda_available", lambda: True)
+    monkeypatch.setattr(backends, "_mlx_metal_available", lambda: True)
+    assert isinstance(backends.get_vlm_backend(), backends.LocalTransformersBackend)
+
+    monkeypatch.setattr(backends, "_cuda_available", lambda: False)
+    with caplog.at_level(logging.INFO, logger="mlops.assessment.backends"):
+        cpu = backends.get_vlm_backend()
+    assert isinstance(cpu, backends.LocalTransformersBackend)
+    assert f"MLX weights not found at {mlx}" in caplog.text
+
+    mlx.mkdir()
+    selected = backends.get_vlm_backend()
+    assert isinstance(selected, backends.LocalMLXBackend)
+    assert selected.model_path == mlx
+    assert selected.cpu_model_path == hf
+
+    monkeypatch.setattr(backends, "_mlx_metal_available", lambda: False)
+    assert isinstance(backends.get_vlm_backend(), backends.LocalTransformersBackend)
+
+
+def test_mlx_load_failure_uses_the_cpu_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[Path] = []
+
+    def cpu_generate(
+        self: backends.LocalTransformersBackend,
+        prompt: str,
+        images: list[bytes],
+        *,
+        model: str,
+        temperature: float,
+        max_new_tokens: int,
+    ) -> str:
+        seen.append(self.model_path)
+        return "cpu"
+
+    def mlx_fails(
+        self: backends.LocalMLXBackend,
+        prompt: str,
+        images: list[bytes],
+        *,
+        temperature: float,
+        max_new_tokens: int,
+    ) -> str:
+        raise RuntimeError("weights failed")
+
+    monkeypatch.setattr(backends.LocalTransformersBackend, "generate", cpu_generate)
+    monkeypatch.setattr(backends.LocalMLXBackend, "_generate_mlx", mlx_fails)
+    backend = backends.LocalMLXBackend(Path("/tmp/mlx"), Path("/tmp/hf"))
+
+    assert backend.generate("p", [b"a"], model="m", temperature=0.0, max_new_tokens=8) == "cpu"
+    assert seen == [Path("/tmp/hf")]
+    assert backend.generate("p", [b"a"], model="m", temperature=0.0, max_new_tokens=8) == "cpu"
+    assert seen == [Path("/tmp/hf"), Path("/tmp/hf")]
 
 
 def test_vllm_without_an_api_base_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -691,6 +762,63 @@ def test_the_local_backend_without_torch_is_unavailable_not_an_import_error() ->
     backend = backends.LocalTransformersBackend("models/does-not-matter")
     with pytest.raises(backends.VLMBackendUnavailableError, match="vlm-local"):
         backend.generate("p", [b"a", b"b"], model="m", temperature=0.0, max_new_tokens=8)
+
+
+def test_a_blank_local_model_path_uses_the_default_directory() -> None:
+    backend = backends.LocalTransformersBackend("  ")
+    assert backend.model_path == backends.REPO_ROOT / backends.DEFAULT_VLM_LOCAL_DIR
+
+
+def test_missing_weights_download_the_default_hugging_face_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "internvl3_5-2b"
+    seen: dict[str, str] = {}
+
+    def fake_download(repo_id: str, local_dir: str) -> None:
+        seen["repo_id"] = repo_id
+        seen["local_dir"] = local_dir
+        path = Path(local_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "config.json").write_text("{}")
+        (path / "model.safetensors").write_text("")
+
+    monkeypatch.setattr(backends, "_snapshot_download", fake_download)
+
+    assert backends.ensure_local_vlm(target) == str(target)
+    assert seen == {
+        "repo_id": backends.DEFAULT_VLM_REPO_ID,
+        "local_dir": str(target),
+    }
+
+
+def test_existing_weights_are_not_downloaded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "internvl3_5-2b"
+    target.mkdir()
+    (target / "config.json").write_text("{}")
+    (target / "model.safetensors").write_text("")
+
+    def fail_download(repo_id: str, local_dir: str) -> None:
+        raise AssertionError(f"unexpected download of {repo_id} into {local_dir}")
+
+    monkeypatch.setattr(backends, "_snapshot_download", fail_download)
+
+    assert backends.ensure_local_vlm(target) == str(target)
+
+
+def test_an_unwritable_path_loads_the_hugging_face_repo_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(backends, "_directory_writable", lambda _path: False)
+
+    def fail_download(repo_id: str, local_dir: str) -> None:
+        raise AssertionError(f"unexpected download of {repo_id} into {local_dir}")
+
+    monkeypatch.setattr(backends, "_snapshot_download", fail_download)
+
+    assert backends.ensure_local_vlm(tmp_path / "missing") == backends.DEFAULT_VLM_REPO_ID
 
 
 # --------------------------------------------------------------------------- #
