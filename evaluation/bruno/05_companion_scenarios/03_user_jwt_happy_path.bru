@@ -1,0 +1,26 @@
+meta {
+  name: 03 User JWT Happy Path (Expect 200)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/companion/devices/me/state?plant_id={{plantId}}
+  body: none
+  auth: bearer
+}
+
+params:query {
+  plant_id: {{plantId}}
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.success: eq true
+  res.body.data.plant_id: eq {{plantId}}
+  res.body.data.state: isDefined
+}

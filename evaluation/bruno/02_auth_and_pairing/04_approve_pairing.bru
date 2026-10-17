@@ -1,0 +1,30 @@
+meta {
+  name: 04 Approve Device Pairing
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/devices/pair/approve
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_code": "{{userCode}}",
+    "name": "Bruno Living Room Planter"
+  }
+}
+
+assert {
+  res.status: eq 200
+}

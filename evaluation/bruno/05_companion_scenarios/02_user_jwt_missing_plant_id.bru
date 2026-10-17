@@ -1,0 +1,21 @@
+meta {
+  name: 02 User JWT Missing plant_id (Expect 400)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/companion/devices/me/state
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+assert {
+  res.status: eq 400
+  res.body.success: eq false
+  res.body.error_code: eq "PLANT_ID_REQUIRED"
+}

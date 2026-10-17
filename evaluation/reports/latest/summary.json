@@ -1,0 +1,258 @@
+{
+  "run_id": "run_20261017_165533_fe59e7",
+  "timestamp_utc": "2026-10-17T16:55:36.684561+00:00",
+  "duration_seconds": 2.873,
+  "overall_status": "PASS",
+  "git_commit": "e630077",
+  "python_version": "3.13.7",
+  "models_used": {
+    "vlm_model": "models/internvl3_5-2b (local)",
+    "llm_model": "llama3.2:latest (ollama)",
+    "embedding_model": "nomic-embed-text:latest (ollama)",
+    "execution_mode": "in_memory"
+  },
+  "scopes": {
+    "vlm": {
+      "scope_name": "vlm",
+      "status": "PASS",
+      "duration_seconds": 1.47,
+      "total_cases": 33,
+      "passed_cases": 33,
+      "metrics": {
+        "mean_semantic_similarity": {
+          "name": "mean_semantic_similarity",
+          "value": 97.16,
+          "formatted_value": "97.16%",
+          "status": "PASS",
+          "threshold": 70.0,
+          "reason": "Mean semantic similarity between expected and actual VLM assessment responses."
+        },
+        "mean_response_difference": {
+          "name": "mean_response_difference",
+          "value": 2.84,
+          "formatted_value": "2.84%",
+          "status": "PASS",
+          "threshold": 30.0,
+          "reason": "Mean difference percentage via (100 - (similarity) * 100)."
+        },
+        "probe_answer_accuracy": {
+          "name": "probe_answer_accuracy",
+          "value": 100.0,
+          "formatted_value": "100.00%",
+          "status": "PASS",
+          "threshold": 100.0,
+          "reason": "All VLM probe answers (yes/no) must match expected ground truth."
+        },
+        "structured_f1_score": {
+          "name": "structured_f1_score",
+          "value": 100.0,
+          "formatted_value": "100.00%",
+          "status": "PASS",
+          "threshold": 80.0,
+          "reason": "Harmonic mean of precision and recall on structured JSON symptom/probe findings."
+        },
+        "structured_precision": {
+          "name": "structured_precision",
+          "value": 100.0,
+          "formatted_value": "100.00",
+          "status": "PASS",
+          "threshold": 80.0,
+          "reason": "Proportion of detected symptoms/probes that were true positives."
+        },
+        "structured_recall": {
+          "name": "structured_recall",
+          "value": 100.0,
+          "formatted_value": "100.00",
+          "status": "PASS",
+          "threshold": 80.0,
+          "reason": "Proportion of expected symptoms/probes successfully detected."
+        },
+        "batch_photo_success_rate": {
+          "name": "batch_photo_success_rate",
+          "value": 100.0,
+          "formatted_value": "100.00%",
+          "status": "PASS",
+          "threshold": 50.0,
+          "reason": "Batch photo criteria pass rate: 29/29 photos passed criteria."
+        },
+        "mean_lexical_similarity": {
+          "name": "mean_lexical_similarity",
+          "value": 82.6,
+          "formatted_value": "82.60%",
+          "status": "PASS",
+          "threshold": null,
+          "reason": "Informational: Mean character and word SequenceMatcher alignment."
+        }
+      },
+      "skip_reason": null,
+      "called_endpoints": [
+        {
+          "method": "",
+          "path": "assessment.vlm  (plant symptom analysis)",
+          "calls": 33,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "vlm.metrics.evaluate_probe_findings",
+          "calls": 33,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "vlm.metrics.evaluate_symptoms_classification",
+          "calls": 33,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "evaluation.common.metrics.calculate_text_similarity",
+          "calls": 33,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "vlm.run.evaluate_batch_photos  (batch photo engine)",
+          "calls": 1,
+          "source": "in-memory"
+        }
+      ]
+    },
+    "llm": {
+      "scope_name": "llm",
+      "status": "PASS",
+      "duration_seconds": 0.113,
+      "total_cases": 5,
+      "passed_cases": 5,
+      "metrics": {
+        "advice_schema_conformance": {
+          "name": "advice_schema_conformance",
+          "value": 100.0,
+          "formatted_value": "100.00%",
+          "status": "PASS",
+          "threshold": 100.0,
+          "reason": "100% adherence to 3NF care plan structure and action grounding."
+        },
+        "mean_semantic_similarity": {
+          "name": "mean_semantic_similarity",
+          "value": 88.83,
+          "formatted_value": "88.83%",
+          "status": "PASS",
+          "threshold": 70.0,
+          "reason": "Mean semantic similarity between expected and actual assessment responses."
+        },
+        "mean_response_difference": {
+          "name": "mean_response_difference",
+          "value": 11.17,
+          "formatted_value": "11.17%",
+          "status": "PASS",
+          "threshold": 30.0,
+          "reason": "Mean difference percentage between expected and actual response via (100 - (similarity) * 100)."
+        },
+        "mean_action_alignment": {
+          "name": "mean_action_alignment",
+          "value": 100.0,
+          "formatted_value": "100.00%",
+          "status": "PASS",
+          "threshold": 80.0,
+          "reason": "Mean overlap percentage of recommended care actions against expected actions."
+        },
+        "mean_lexical_similarity": {
+          "name": "mean_lexical_similarity",
+          "value": 8.36,
+          "formatted_value": "8.36%",
+          "status": "PASS",
+          "threshold": null,
+          "reason": "Informational: Mean character and word SequenceMatcher alignment."
+        }
+      },
+      "skip_reason": null,
+      "called_endpoints": [
+        {
+          "method": "",
+          "path": "advice.service  (care plan generation)",
+          "calls": 5,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "evaluation.common.metrics.calculate_text_similarity",
+          "calls": 5,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "evaluation.common.metrics.calculate_jaccard  (action alignment)",
+          "calls": 5,
+          "source": "in-memory"
+        }
+      ]
+    },
+    "end_to_end": {
+      "scope_name": "end_to_end",
+      "status": "PASS",
+      "duration_seconds": 1.288,
+      "total_cases": 6,
+      "passed_cases": 6,
+      "metrics": {
+        "scenario_success_rate": {
+          "name": "scenario_success_rate",
+          "value": 100.0,
+          "formatted_value": "100.00%",
+          "status": "PASS",
+          "threshold": 100.0,
+          "reason": "All mandatory criteria must pass for every scenario."
+        },
+        "fe_envelope_compliance_rate": {
+          "name": "fe_envelope_compliance_rate",
+          "value": 100.0,
+          "formatted_value": "100.00%",
+          "status": "PASS",
+          "threshold": 100.0,
+          "reason": "Adherence to poc-ai-agent Frontend Response Envelope contract."
+        },
+        "median_pipeline_latency_ms": {
+          "name": "median_pipeline_latency_ms",
+          "value": 36.39,
+          "formatted_value": "36.39ms",
+          "status": "PASS",
+          "threshold": 2500.0,
+          "reason": "Median pipeline run latency."
+        }
+      },
+      "skip_reason": null,
+      "called_endpoints": [
+        {
+          "method": "",
+          "path": "orchestrator.worker.execute_run",
+          "calls": 6,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "orchestrator.stages.claim_frame  (capture stage)",
+          "calls": 6,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "orchestrator.stages.assess_frames  (assessment stage)",
+          "calls": 6,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "advice  (LLM care-plan stage)",
+          "calls": 6,
+          "source": "in-memory"
+        },
+        {
+          "method": "",
+          "path": "companion  (companion message stage)",
+          "calls": 6,
+          "source": "in-memory"
+        }
+      ]
+    }
+  }
+}

@@ -14,15 +14,16 @@ from langchain_core.runnables import RunnableLambda
 class MockChatModel(BaseChatModel):
     """LangChain mock chat model supporting canned responses, structured output, and call history."""
 
+    model: str = "mock-chat-model"
     responses: list[Any] = []
     structured_responses: list[Any] = []
     call_history: list[Any] = []
-
 
     def __init__(
         self,
         responses: Optional[list[Any]] = None,
         structured_responses: Optional[list[Any]] = None,
+        model: str = "mock-chat-model",
         **kwargs: Any,
     ):
         """``responses`` answer plain chat calls (companion);
@@ -30,7 +31,8 @@ class MockChatModel(BaseChatModel):
 
         Without ``structured_responses`` both kinds of call share ``responses``.
         """
-        super().__init__(**kwargs)
+        super().__init__(model=model, **kwargs)
+        object.__setattr__(self, "model", model)
         object.__setattr__(self, "responses", list(responses or []))
         object.__setattr__(
             self,
