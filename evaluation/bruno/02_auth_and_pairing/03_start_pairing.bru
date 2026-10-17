@@ -1,0 +1,34 @@
+meta {
+  name: 03 Start Device Pairing
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/devices/pair
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "physical_id": "{{deviceSerial}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.device_code: isDefined
+  res.body.user_code: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    bru.setVar("deviceCode", res.body.device_code);
+    bru.setVar("userCode", res.body.user_code);
+  }
+}

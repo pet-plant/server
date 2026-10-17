@@ -5,13 +5,23 @@ name: pet-plant
 #
 #   docker compose up --build
 #
+# This file does not request a GPU, so the same command starts on a Mac.
+# `VLM_PROVIDER=local` inside the container then runs InternVL on CPU.
+# NVIDIA hosts that want CUDA add the overlay:
+#
+#   docker compose -f compose.yaml -f compose.gpu.yaml up --build
+#
+# MLX is Apple-only and does not run in this Linux container. Run the API on
+# the host (`uv run uvicorn`) to use it.
+#
 # Run a worker job ad hoc:
 #   docker compose run --rm worker python src/main_worker.py <job>
 #
 # Self-hosted inference (VLM served with vLLM, segmentation) runs on separate
 # infrastructure and is NOT part of this file — point VLM_API_BASE /
 # SEGMENTATION_ENDPOINT at it via .env when VLM_PROVIDER=vllm. The local
-# assessment backend loads InternVL weights from ./models. Photos are uploaded
+# assessment backend loads InternVL weights from ./models. A missing model is
+# downloaded on the first probe (OpenGVLab/InternVL3_5-2B-HF). Photos are uploaded
 # over HTTP by a device or client; no webcam is attached to this server container.
 
 services:
@@ -66,7 +76,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    gpus: all
     env_file:
       - path: .env
         required: false
@@ -78,7 +87,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./models:/app/models:ro
+      - ./models:/app/models
     restart: unless-stopped
     depends_on:
       postgres:

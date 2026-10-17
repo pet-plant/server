@@ -49,6 +49,11 @@ vlm-local = [
     "timm>=1.0",
     "einops>=0.8",
 ]
+# Apple Silicon MLX runtime for `VLM_PROVIDER=local`. Marker keeps it off Linux
+# images and CI: `uv sync --group vlm-mlx` on a Mac.
+vlm-mlx = [
+    "mlx-vlm>=0.3.3 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 [tool.uv]
 # This is an application, not a distributable package: uv only manages the
@@ -80,7 +85,7 @@ known-first-party = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-ra"
 

@@ -1,0 +1,23 @@
+{
+  "confidence_threshold": 0.5,
+  "fast_mode": false,
+  "enable_judge": false,
+  "judge_provider": "openai",
+  "reports_dir": "evaluation/reports",
+  "keep_latest": true,
+  "quality_thresholds": {
+    "min_width": 640,
+    "min_height": 480,
+    "min_brightness": 40.0,
+    "max_brightness": 220.0,
+    "min_blur_score": 50.0
+  },
+  "latency_sla": {
+    "median_ms": 2500,
+    "p95_ms": 6000
+  },
+  "ollama_host": "http://localhost:11434",
+  "llm_min_similarity": 70.0,
+  "llm_max_difference": 30.0,
+  "llm_min_action_alignment": 80.0
+}

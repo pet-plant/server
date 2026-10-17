@@ -1,0 +1,27 @@
+meta {
+  name: 01 Register User
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{userEmail}}",
+    "password": "{{userPassword}}",
+    "name": "Bruno Evaluator"
+  }
+}
+
+assert {
+  res.status: in [201, 409]
+}

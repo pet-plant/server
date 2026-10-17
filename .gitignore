@@ -59,3 +59,9 @@ docs/plans/
 # Local agent config
 .mcp.json
 AGENTS.md
+
+# Evaluation reports (ignore historical timestamped runs, commit latest mirror and .gitkeep)
+evaluation/reports/*
+!evaluation/reports/.gitkeep
+!evaluation/reports/README.md
+!evaluation/reports/latest/

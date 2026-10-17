@@ -176,14 +176,30 @@ When adding or editing any code in `src/api/`, you must verify:
 
 ### 5.1 Target Audience & When to Use
 - **👤 For Humans (Engineers & Reviewers)**:
-  - Run `scripts/seed_companion_scenarios.py` to seed real states into your local database.
-  - Open **Postman Desktop** and run the collection runner interactively to visually inspect response schemas and status badges.
-  - Run the `curl` commands to test hardware edge token vs mobile user JWT simulation.
-  - Run `--clean` afterwards to reset your database.
+  - Seed real states into the local database. The curls and Postman steps are in §5.2.
+    ```bash
+    uv run python scripts/seed_companion_scenarios.py
+    ```
+  - Open **Postman Desktop**, import `tests/postman/Pet_Plant_Companion_State_API.postman_collection.json`, and run the collection runner.
+  - Reset the database when finished:
+    ```bash
+    uv run python scripts/seed_companion_scenarios.py --clean
+    ```
 - **🤖 For AI Agents & Automated CI**:
-  - Run `uv run pytest tests/api/test_companion_state.py` for headless unit/integration assertions.
-  - Run `uv run ruff check` and `uv run mypy src` before committing code to ensure zero lint or typing regressions.
-  - Use `scripts/seed_companion_scenarios.py` + `--clean` only in end-to-end integration environments with a live database.
+  - Headless assertions:
+    ```bash
+    uv run pytest tests/api/test_companion_state.py
+    ```
+  - Before committing:
+    ```bash
+    uv run ruff check
+    uv run mypy src
+    ```
+  - Seed and clean only against a live database:
+    ```bash
+    uv run python scripts/seed_companion_scenarios.py
+    uv run python scripts/seed_companion_scenarios.py --clean
+    ```
 
 ### 5.2 Seeding & Running Tests
 1. **Seed test data** (creates test user and plants for all 3 scenarios):
@@ -202,6 +218,18 @@ When adding or editing any code in `src/api/`, you must verify:
    - **Scenario 3 (Photo Retake / `REQUEST_MORE_INFORMATION`)**:
      ```bash
      curl -s -H "Authorization: Bearer ppd_retake_device_token_secret_789" http://localhost:8000/companion/devices/me/state | jq .
+     ```
+   - **Same three plants with the tester user JWT** (looks each plant up by name):
+     ```bash
+     TOKEN=$(curl -s -X POST http://localhost:8000/auth/token \
+       -d "username=postman_tester@example.com&password=Password123!" | jq -r .access_token)
+     for name in Steady Stressed Blurry; do
+       PLANT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/registry/plants \
+         | jq -r --arg name "$name" '.[] | select(.name | contains($name)) | .id')
+       echo "=== $name ($PLANT_ID) ==="
+       curl -s -H "Authorization: Bearer $TOKEN" \
+         "http://localhost:8000/companion/devices/me/state?plant_id=${PLANT_ID}" | jq .
+     done
      ```
 3. **Run Postman suite**:
    - Import `tests/postman/Pet_Plant_Companion_State_API.postman_collection.json`.

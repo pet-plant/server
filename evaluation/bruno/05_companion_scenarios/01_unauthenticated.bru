@@ -1,0 +1,17 @@
+meta {
+  name: 01 Unauthenticated Companion State (Expect 401)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/companion/devices/me/state
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+  res.body.success: eq false
+  res.body.error_code: eq "UNAUTHORIZED"
+}

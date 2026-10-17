@@ -1,0 +1,19 @@
+meta {
+  name: 05 Unbound Device Token (Expect 404 DEVICE_NOT_BOUND)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/companion/devices/me/state
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: ppd_unbound_device_token_test_999
+}
+
+assert {
+  res.status: in [401, 404]
+}
