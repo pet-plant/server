@@ -241,7 +241,7 @@ contexts reach it over the network using values from `.env`.
 
 | Service | Hosting | Interface | Used by |
 |---------|---------|-----------|---------|
-| VLM (probe execution) | On-prem **vLLM**, or in-process transformers | `VLM_PROVIDER=vllm` → OpenAI-compatible HTTP (`VLM_API_BASE`); `VLM_PROVIDER=local` → weights at `VLM_LOCAL_MODEL_PATH` (`uv sync --group vlm-local`) | `mlops` (for assessment) |
+| VLM (probe execution) | On-prem **vLLM**, or in-process CUDA / MLX / CPU | `VLM_PROVIDER=vllm` → OpenAI-compatible HTTP (`VLM_API_BASE`); `VLM_PROVIDER=local` → CUDA if a GPU is visible, else MLX on Apple Silicon, else CPU. Weights at `VLM_LOCAL_MODEL_PATH` (`uv sync --group vlm-local`; MLX also needs `--group vlm-mlx`) | `mlops` (for assessment) |
 | Segmentation model | On-prem | HTTP API (`SEGMENTATION_ENDPOINT`) | capture |
 | LLM (advice, companion, probe generation) | External API or local Ollama, text only | `LLM_PROVIDER=openai` uses `LLM_API_BASE`; `LLM_PROVIDER=ollama` uses `OLLAMA_HOST` | `mlops` (for advice, companion, knowledge) |
 | Langfuse (prompts, traces, datasets, scores) | Langfuse Cloud or self-hosted (`LANGFUSE_HOST`) | Langfuse SDK | `mlops` — one project **per component**, so one key pair each |
@@ -255,6 +255,14 @@ one command from the repo root:
 
 ```bash
 docker compose up --build            # add -d to detach; drop --build after the first run
+```
+
+That command does not request a GPU, so it starts on a Mac. Inside the Linux
+container, `VLM_PROVIDER=local` has no CUDA and no MLX, and InternVL runs on CPU.
+An NVIDIA host opts into GPU passthrough with:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml up --build
 ```
 
 `web` comes up on <http://localhost:8000> (`/health`, `/docs`) once `postgres` and
@@ -277,11 +285,27 @@ infrastructure:
 ```bash
 uv sync                              # .venv from the committed uv.lock (deps + dev group)
 uv sync --group vlm-local            # optional: in-process InternVL when VLM_PROVIDER=local
+uv sync --group vlm-mlx              # optional, Apple Silicon only: MLX runtime
 uv run pytest
 uv run ruff check .
 uv run mypy
 uv run uvicorn main_web:app --app-dir src --reload
 ```
+
+With `VLM_PROVIDER=local`, the first assessment probe picks a runtime in order:
+CUDA when PyTorch can see a GPU, otherwise MLX when `vlm-mlx` is installed and
+`models/internvl3_5-2b-mlx` exists, otherwise CPU. If `models/internvl3_5-2b`
+has no weights yet, that same probe downloads `OpenGVLab/InternVL3_5-2B-HF`
+into it. Convert those Hugging Face weights once on a Mac (there is no
+published MLX build of this 2B model):
+
+```bash
+uv run python -m mlx_vlm convert --hf-path models/internvl3_5-2b -q --mlx-path models/internvl3_5-2b-mlx
+```
+
+If that directory is missing, or MLX fails to load, the probe logs the reason and
+runs on CPU. MLX does not run inside the Docker container; use the host
+`uvicorn` command above, with Postgres and MinIO still provided by Compose.
 
 Relevant environment variables (full list in `.env.example`):
 
@@ -289,8 +313,33 @@ Relevant environment variables (full list in `.env.example`):
 |----------|---------|
 | `VLM_PROVIDER` | `vllm` (default) or `local` |
 | `VLM_API_BASE` / `VLM_API_KEY` | OpenAI-compatible vLLM endpoint |
-| `VLM_LOCAL_MODEL_PATH` | Weights for `local` (default `models/internvl3_5-2b`) |
+| `VLM_LOCAL_MODEL_PATH` | Weights for `local` (default `models/internvl3_5-2b`; missing weights download `OpenGVLab/InternVL3_5-2B-HF`) |
 | `LLM_PROVIDER` | `openai` (default) or `ollama` for chat models |
+
+---
+
+## Evaluation Suite & Bruno Collection
+
+The repository includes a performance evaluation suite and Git-versioned Bruno collection under `evaluation/` and `bruno/`.
+
+### Quick Evaluation Commands
+
+```bash
+# Run all evaluation scopes (VLM, LLM, Multi-day End-to-End)
+uv run python -m evaluation.scripts.cli run
+
+# Batch evaluate plant photos against criteria (pass/fail rate and averages)
+uv run python -m evaluation.scripts.cli evaluate-photos
+
+# Run test database fixture lifecycle setup and teardown
+uv run python -m evaluation.scripts.cli setup-fixtures
+uv run python -m evaluation.scripts.cli cleanup-fixtures
+
+# Run automated evaluation unit & regression tests
+uv run pytest tests/test_evaluation_suite.py
+```
+
+For full documentation on metrics, photo ingestion, HTTP endpoint testing, and the Bruno collection, see [`evaluation/README.md`](evaluation/README.md).
 
 ---
 

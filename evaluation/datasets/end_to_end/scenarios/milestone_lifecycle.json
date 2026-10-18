@@ -1,0 +1,120 @@
+{
+  "scenario": "milestone_lifecycle",
+  "description": "Multi-day lifecycle demonstrating first_symptom, health_crisis, severe_episode, and full_recovery milestones.",
+  "observations": [
+    {
+      "plant_id": "plant-monstera-lifecycle",
+      "species": "Monstera deliciosa",
+      "timestamp": "2026-09-01T10:00:00Z",
+      "health_status": "healthy",
+      "consensus": {
+        "agreement": 1.0,
+        "runs": 5,
+        "model_stated_average": 0.95
+      },
+      "observations": [],
+      "image_refs": [
+        "images/healthy_baseline.jpg"
+      ]
+    },
+    {
+      "plant_id": "plant-monstera-lifecycle",
+      "species": "Monstera deliciosa",
+      "timestamp": "2026-09-02T10:00:00Z",
+      "health_status": "possibly_unhealthy",
+      "consensus": {
+        "agreement": 1.0,
+        "runs": 5,
+        "model_stated_average": 0.92
+      },
+      "observations": [
+        {
+          "type": "leaf_yellowing",
+          "severity": "mild",
+          "description": "pale green with yellow tips"
+        }
+      ],
+      "image_refs": [
+        "images/yellowing_moderate.jpg"
+      ]
+    },
+    {
+      "plant_id": "plant-monstera-lifecycle",
+      "species": "Monstera deliciosa",
+      "timestamp": "2026-09-03T10:00:00Z",
+      "health_status": "unhealthy",
+      "consensus": {
+        "agreement": 1.0,
+        "runs": 5,
+        "model_stated_average": 0.94
+      },
+      "observations": [
+        {
+          "type": "visible_damage",
+          "severity": "severe",
+          "description": "severe wilting and dark brown necrotic patches"
+        }
+      ],
+      "image_refs": [
+        "images/wilting_severe.jpg"
+      ]
+    },
+    {
+      "plant_id": "plant-monstera-lifecycle",
+      "species": "Monstera deliciosa",
+      "timestamp": "2026-09-04T10:00:00Z",
+      "health_status": "unhealthy",
+      "consensus": {
+        "agreement": 1.0,
+        "runs": 5,
+        "model_stated_average": 0.93
+      },
+      "observations": [
+        {
+          "type": "visible_damage",
+          "severity": "severe",
+          "description": "dark necrotic patches expanding"
+        }
+      ],
+      "image_refs": [
+        "images/drought_desiccated.jpg"
+      ]
+    },
+    {
+      "plant_id": "plant-monstera-lifecycle",
+      "species": "Monstera deliciosa",
+      "timestamp": "2026-09-05T10:00:00Z",
+      "health_status": "unhealthy",
+      "consensus": {
+        "agreement": 1.0,
+        "runs": 5,
+        "model_stated_average": 0.92
+      },
+      "observations": [
+        {
+          "type": "visible_damage",
+          "severity": "severe",
+          "description": "persistent dark necrotic patches across lower foliage"
+        }
+      ],
+      "image_refs": [
+        "images/drought_sequence.jpg"
+      ]
+    },
+    {
+      "plant_id": "plant-monstera-lifecycle",
+      "species": "Monstera deliciosa",
+      "timestamp": "2026-09-06T10:00:00Z",
+      "health_status": "healthy",
+      "consensus": {
+        "agreement": 1.0,
+        "runs": 5,
+        "model_stated_average": 0.96
+      },
+      "observations": [],
+      "image_refs": [
+        "images/recovery_healthy.jpg"
+      ]
+    }
+  ]
+}

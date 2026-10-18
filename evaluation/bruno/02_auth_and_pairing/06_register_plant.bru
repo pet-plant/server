@@ -1,0 +1,37 @@
+meta {
+  name: 06 Register Plant (Bound to Device)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/registry/plants
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno Test Monstera",
+    "species_code": "monstera_deliciosa",
+    "device_id": "{{deviceSerial}}"
+  }
+}
+
+assert {
+  res.status: in [201, 409]
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("plantId", res.body.id);
+  }
+}

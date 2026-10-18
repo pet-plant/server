@@ -1,0 +1,277 @@
+{
+  "version": "1.0.0",
+  "scope": "llm",
+  "description": "Benchmark care plan test cases evaluating action grounding, 3NF schema structure, and expected vs actual response text similarity. Scenarios derived from sample botanical knowledge.",
+  "cases": [
+    {
+      "id": "CASE-ADVICE-001",
+      "plant_id": "monstera-1",
+      "description": "Mild chlorotic yellowing on lower leaves — overwatering (monstera knowledge)",
+      "input_context": {
+        "health_status": "possibly_unhealthy",
+        "symptoms": "Multiple older, lower leaves located nearest to the potting soil turn a solid, bright yellow color simultaneously.",
+        "species_code": "monstera_deliciosa",
+        "approved_actions": [
+          {"id": "A1", "label": "Pause watering", "action": "Stop watering the Monstera immediately. Wait until the top surface of the potting soil looks significantly lighter in color and appears completely dry before providing any more water.", "type": "water"},
+          {"id": "A2", "label": "Inspect roots", "action": "Check root system for signs of rot — look for soft dark discoloration on the root surfaces.", "type": "inspect"}
+        ]
+      },
+      "expected_response": {
+        "status_label": "Overwatering Stress",
+        "assessment": "Lower leaves show solid bright yellow discoloration likely related to chronic overwatering. The potting soil remains constantly soggy for extended periods, cutting off oxygen to roots. Upper canopy remains healthy, suggesting the issue is localized to the root zone.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Pause watering",
+            "action": "Stop watering the Monstera immediately. Wait until the top surface of the potting soil looks significantly lighter in color and appears completely dry before providing any more water.",
+            "type": "water"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Inspect roots",
+            "action": "Check root system for signs of rot — look for soft dark discoloration on the root surfaces.",
+            "type": "inspect"
+          }
+        ]
+      },
+      "actual_response": {
+        "status_label": "Overwatering Stress",
+        "assessment": "Lower leaves exhibit solid yellow discoloration, characteristic of prolonged soil moisture preventing root oxygen uptake. The upper canopy appears unaffected. Recommend withholding water until topsoil is dry and inspecting root health.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Pause watering",
+            "action": "Stop watering the Monstera immediately. Wait until the top surface of the potting soil looks significantly lighter in color and appears completely dry before providing any more water.",
+            "type": "water"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Inspect roots",
+            "action": "Check root system for signs of rot — look for soft dark discoloration on the root surfaces.",
+            "type": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "CASE-ADVICE-002",
+      "plant_id": "monstera-2",
+      "description": "Severe wilting and limp stems — water deficit (monstera knowledge)",
+      "input_context": {
+        "health_status": "unhealthy",
+        "symptoms": "The entire plant canopy droops significantly downward toward the floor. The thick green stems lose structural firmness and look slightly shriveled.",
+        "species_code": "monstera_deliciosa",
+        "approved_actions": [
+          {"id": "A1", "label": "Deep water", "action": "Pour room-temperature water evenly over the entire top surface of the soil until a steady stream flows directly out of the bottom drainage holes of the pot.", "type": "water"},
+          {"id": "A2", "label": "Empty saucer", "action": "Empty the saucer beneath the plant pot thirty minutes after the initial watering to prevent stagnant water accumulation.", "type": "other"}
+        ]
+      },
+      "expected_response": {
+        "status_label": "Severe Dehydration",
+        "assessment": "The entire canopy droops significantly with stems losing structural rigidity. The potting soil has become completely bone dry throughout the entire root zone, causing loss of turgor pressure. Immediate deep watering is critical.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Deep water",
+            "action": "Pour room-temperature water evenly over the entire top surface of the soil until a steady stream flows directly out of the bottom drainage holes of the pot.",
+            "type": "water"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Empty saucer",
+            "action": "Empty the saucer beneath the plant pot thirty minutes after the initial watering to prevent stagnant water accumulation.",
+            "type": "other"
+          }
+        ]
+      },
+      "actual_response": {
+        "status_label": "Severe Dehydration",
+        "assessment": "Plant shows dramatic wilting with all leaves drooping downward and stems appearing shriveled due to complete root zone dryness. Turgor pressure has been lost throughout. Immediate thorough watering through the drainage holes is required.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Deep water",
+            "action": "Pour room-temperature water evenly over the entire top surface of the soil until a steady stream flows directly out of the bottom drainage holes of the pot.",
+            "type": "water"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Empty saucer",
+            "action": "Empty the saucer beneath the plant pot thirty minutes after the initial watering to prevent stagnant water accumulation.",
+            "type": "other"
+          }
+        ]
+      }
+    },
+    {
+      "id": "CASE-ADVICE-003",
+      "plant_id": "calathea-1",
+      "description": "Crispy brown leaf edges — low humidity (calathea knowledge)",
+      "input_context": {
+        "health_status": "possibly_unhealthy",
+        "symptoms": "The outermost margins and pointed tips of leaves turn dry, brown, and highly brittle with a thin yellow border separating dead tissue from green interior.",
+        "species_code": "calathea",
+        "approved_actions": [
+          {"id": "A1", "label": "Add humidity tray", "action": "Place a wide shallow tray filled with pebbles and water directly beneath the plant pot. Ensure the bottom of the pot rests on the dry pebbles and does not touch the liquid water.", "type": "other"},
+          {"id": "A2", "label": "Move away from AC", "action": "Relocate the plant away from air conditioning vents or heating units that cause dry air currents.", "type": "move"}
+        ]
+      },
+      "expected_response": {
+        "status_label": "Low Humidity Damage",
+        "assessment": "Leaf margins and tips show dry, brittle browning with characteristic yellow transition zone. The ambient indoor air is excessively dry, often due to active indoor heating or air conditioning. Interior leaf tissue remains green, indicating the damage is humidity-related.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Add humidity tray",
+            "action": "Place a wide shallow tray filled with pebbles and water directly beneath the plant pot. Ensure the bottom of the pot rests on the dry pebbles and does not touch the liquid water.",
+            "type": "other"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Move away from AC",
+            "action": "Relocate the plant away from air conditioning vents or heating units that cause dry air currents.",
+            "type": "move"
+          }
+        ]
+      },
+      "actual_response": {
+        "status_label": "Low Humidity Damage",
+        "assessment": "Brown crispy edges observed along leaf margins with a narrow yellow band separating damaged tissue from the healthy green center. Symptoms consistent with dry indoor air conditions. Increasing ambient humidity and moving the plant away from air conditioning is recommended.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Add humidity tray",
+            "action": "Place a wide shallow tray filled with pebbles and water directly beneath the plant pot. Ensure the bottom of the pot rests on the dry pebbles and does not touch the liquid water.",
+            "type": "other"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Move away from AC",
+            "action": "Relocate the plant away from air conditioning vents or heating units that cause dry air currents.",
+            "type": "move"
+          }
+        ]
+      }
+    },
+    {
+      "id": "CASE-ADVICE-004",
+      "plant_id": "pothos-1",
+      "description": "Pale faded leaves with scorch marks — excess light (pothos knowledge)",
+      "input_context": {
+        "health_status": "possibly_unhealthy",
+        "symptoms": "Leaves closest to the window develop a washed-out pale yellowish-green color with large dry papery brown scorch marks in the center of the faded upper leaves.",
+        "species_code": "pothos",
+        "approved_actions": [
+          {"id": "A1", "label": "Move away from window", "action": "Relocate the plant pot several feet further away from the intensely sunny window. Position in a location where natural daylight casts a soft blurry shadow.", "type": "move"},
+          {"id": "A2", "label": "Remove scorched leaves", "action": "Trim off severely scorched leaves at the stem to redirect energy to healthy growth.", "type": "inspect"}
+        ]
+      },
+      "expected_response": {
+        "status_label": "Sun Scorch Damage",
+        "assessment": "Upper leaves facing the window show bleached, pale yellowish-green coloration with dry papery brown scorch marks. Direct harsh afternoon sunlight is physically burning the delicate leaf tissue. Plant should be relocated to bright indirect light.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Move away from window",
+            "action": "Relocate the plant pot several feet further away from the intensely sunny window. Position in a location where natural daylight casts a soft blurry shadow.",
+            "type": "move"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Remove scorched leaves",
+            "action": "Trim off severely scorched leaves at the stem to redirect energy to healthy growth.",
+            "type": "inspect"
+          }
+        ]
+      },
+      "actual_response": {
+        "status_label": "Sun Scorch Damage",
+        "assessment": "Light-facing foliage appears washed out and faded with brown papery marks on the most exposed leaves. Damage pattern indicates excessive direct sunlight burning the leaf tissue. Moving the plant to a spot with diffused light will prevent further damage.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Move away from window",
+            "action": "Relocate the plant pot several feet further away from the intensely sunny window. Position in a location where natural daylight casts a soft blurry shadow.",
+            "type": "move"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Remove scorched leaves",
+            "action": "Trim off severely scorched leaves at the stem to redirect energy to healthy growth.",
+            "type": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "CASE-ADVICE-005",
+      "plant_id": "snake_plant-1",
+      "description": "Soft mushy base — root rot (snake plant knowledge)",
+      "input_context": {
+        "health_status": "unhealthy",
+        "symptoms": "The base portion of selected leaves near the soil line becomes visibly soft and mushy to the touch. The affected base regions change from the original stiff green to a dark brownish-yellow, water-soaked appearance.",
+        "species_code": "snake_plant",
+        "approved_actions": [
+          {"id": "A1", "label": "Remove affected leaves", "action": "Carefully pull out or cut away the mushy leaves at soil level. Clean cutting tools with rubbing alcohol between each cut.", "type": "inspect"},
+          {"id": "A2", "label": "Repot in dry mix", "action": "Unpot the plant, trim any dark soft roots, and repot into fresh, fast-draining succulent-type soil mix.", "type": "other"}
+        ]
+      },
+      "expected_response": {
+        "status_label": "Root Rot",
+        "assessment": "Selected leaves show soft mushy base tissue changing from stiff green to dark brownish-yellow. This indicates the root system is decaying from persistent moisture. Immediate removal of affected tissue and repotting in dry well-draining mix is critical to prevent spreading.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Remove affected leaves",
+            "action": "Carefully pull out or cut away the mushy leaves at soil level. Clean cutting tools with rubbing alcohol between each cut.",
+            "type": "inspect"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Repot in dry mix",
+            "action": "Unpot the plant, trim any dark soft roots, and repot into fresh, fast-draining succulent-type soil mix.",
+            "type": "other"
+          }
+        ]
+      },
+      "actual_response": {
+        "status_label": "Root Rot",
+        "assessment": "Base of affected leaves has become soft and water-soaked with dark brownish discoloration, indicating fungal rot from overwatering. The root system likely has similar decay. Removing damaged tissue and repotting in fast-draining soil is essential.",
+        "actions": [
+          {
+            "approved_action_id": "A1",
+            "priority": 1,
+            "label": "Remove affected leaves",
+            "action": "Carefully pull out or cut away the mushy leaves at soil level. Clean cutting tools with rubbing alcohol between each cut.",
+            "type": "inspect"
+          },
+          {
+            "approved_action_id": "A2",
+            "priority": 2,
+            "label": "Repot in dry mix",
+            "action": "Unpot the plant, trim any dark soft roots, and repot into fresh, fast-draining succulent-type soil mix.",
+            "type": "other"
+          }
+        ]
+      }
+    }
+  ]
+}

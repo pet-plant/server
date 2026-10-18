@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "scope": "vlm",
+  "description": "Template for ground-truth labeled plant symptom photo pairs.",
+  "samples": [
+    {
+      "id": "VLM-SAMPLE-001",
+      "plant_id": "monstera-sample-1",
+      "species_code": "monstera_deliciosa",
+      "image_prev_path": "images/plant_day1.jpg",
+      "image_curr_path": "images/plant_day2.jpg",
+      "expected_symptoms": [
+        {
+          "type": "leaf_yellowing",
+          "severity": "mild",
+          "description": "Lower leaves showing yellow discoloration around margins"
+        }
+      ],
+      "expected_probe_findings": [
+        {
+          "slug": "monstera_overwatering",
+          "answer": "yes",
+          "evidence": "Yellowing on lower leaves and drooping petioles"
+        }
+      ]
+    }
+  ]
+}

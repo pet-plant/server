@@ -12,7 +12,7 @@ This directory contains developer tooling and verification scripts for local dev
 | **`seed_companion_scenarios.py --clean`** | 👤 **Human** & 🤖 **Agent** | Removes all seeded test users, devices, observations, care plans, and messages. | **Immediately after finishing API testing** to leave zero test artifacts/garbage in PostgreSQL. | `uv run python scripts/seed_companion_scenarios.py --clean` |
 | **`verify_pipeline.py`** | 🤖 **Agent** & 👤 **Human** | In-memory SQLite run through all 4 stages. Capture and the VLM write are **faked**; the 0-token Event Engine, advice and companion run for real. | **When verifying pipeline orchestration wiring** without a device, Docker, Langfuse or a live VLM. | `uv run python scripts/verify_pipeline.py` |
 | **Debug capture / assessment** | 👤 **Human** | `POST /capture/plants/{plant_id}/frames` (upload a photo) then `POST /assessment/plants/{plant_id}/run` (admin JWT). Touches a real VLM. | **Laptop smoke test** after two photos are uploaded. Not for agents/CI. | See §3 |
-| **Local VLM run** | 👤 **Human** | `uv sync --group vlm-local`, `VLM_PROVIDER=local`. | **When checking InternVL on a laptop.** Blocks the web process for minutes. Agents use fakes instead. | See §3 |
+| **Local VLM run** | 👤 **Human** | `uv sync --group vlm-local` (and `--group vlm-mlx` on Apple Silicon), `VLM_PROVIDER=local`. Runtime order: CUDA, then MLX, then CPU. | **When checking InternVL on a laptop.** Blocks the web process for the duration of inference. Agents use fakes instead. | See §3 |
 | **`tests/mlops/test_scenarios_mock.py`** | 🤖 **Agent** (CI/CD) | Full pytest suite running all 6 plant health scenarios using deterministic mock LLM responses. | **During standard automated testing (`uv run pytest`)** or CI/CD to prevent regressions. | `uv run pytest tests/mlops/test_scenarios_mock.py` |
 | **Postman Collection** (`tests/postman/`) | 👤 **Human** | End-to-end black-box HTTP regression suite testing auth, device pairing, error envelopes, and all 3 delivery scenarios. | **When verifying the live web API server** (`http://localhost:8000`) interactively from the Postman desktop app. | Run in Postman or via Newman CLI |
 
@@ -54,9 +54,16 @@ curl -s -H "Authorization: Bearer ppd_steady_device_token_secret_123" http://loc
 curl -s -H "Authorization: Bearer ppd_care_device_token_secret_456" http://localhost:8000/companion/devices/me/state | jq .
 curl -s -H "Authorization: Bearer ppd_retake_device_token_secret_789" http://localhost:8000/companion/devices/me/state | jq .
 
-# 3. Test endpoints using mobile user JWT:
-TOKEN=$(curl -s -X POST http://localhost:8000/auth/token -d "username=postman_tester@example.com&password=Password123!" | jq -r .access_token)
-curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8000/companion/devices/me/state?plant_id=<plant_id>" | jq .
+# 3. Test the same plants with the tester user JWT:
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/token \
+  -d "username=postman_tester@example.com&password=Password123!" | jq -r .access_token)
+for name in Steady Stressed Blurry; do
+  PLANT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/registry/plants \
+    | jq -r --arg name "$name" '.[] | select(.name | contains($name)) | .id')
+  echo "=== $name ($PLANT_ID) ==="
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "http://localhost:8000/companion/devices/me/state?plant_id=${PLANT_ID}" | jq .
+done
 
 # 4. Clean up all seeded test data when finished:
 uv run python scripts/seed_companion_scenarios.py --clean
@@ -97,10 +104,34 @@ Expected output:
 
 These touch a real model. Agents and CI use the fakes in `verify_pipeline.py` and `tests/orchestrator/` instead.
 
-1. `uv sync --group vlm-local`
-2. Set `VLM_PROVIDER=local` and `VLM_LOCAL_MODEL_PATH=models/internvl3_5-2b`.
-3. As a superuser: upload two photos of the plant with `POST /capture/plants/{plant_id}/frames` (multipart `image`; the first is the baseline), then `POST /assessment/plants/{plant_id}/run`.
-4. Confirm an observation with consensus from the prompt's `runs` (typically 5). The debug assessment does **not** run the rules engine; the observation still counts in history.
+1. Install the local VLM extra. On Apple Silicon, install the MLX extra as well.
+
+   ```bash
+   uv sync --group vlm-local
+   ```
+
+   ```bash
+   uv sync --group vlm-mlx
+   ```
+
+2. In `.env`, set:
+
+   ```text
+   VLM_PROVIDER=local
+   VLM_LOCAL_MODEL_PATH=models/internvl3_5-2b
+   ```
+
+   If that directory has no weights, the first probe downloads `OpenGVLab/InternVL3_5-2B-HF` into it.
+
+3. The first probe uses CUDA when a GPU is visible, otherwise MLX, otherwise CPU. Docker on a Mac is the CPU path: MLX runs only in this host process. Convert weights once before expecting MLX:
+
+   ```bash
+   uv run python -m mlx_vlm convert --hf-path models/internvl3_5-2b -q --mlx-path models/internvl3_5-2b-mlx
+   ```
+
+   A missing `models/internvl3_5-2b-mlx` directory, or an MLX load failure, is logged and the probe continues on CPU.
+4. As a superuser: upload two photos of the plant with `POST /capture/plants/{plant_id}/frames` (multipart `image`; the first is the baseline), then `POST /assessment/plants/{plant_id}/run`.
+5. Confirm an observation with consensus from the prompt's `runs` (typically 5). The debug assessment does **not** run the rules engine; the observation still counts in history.
 
 `VLM_PROVIDER=local` blocks the web / orchestrator loop thread for the duration of inference (minutes on CPU).
 

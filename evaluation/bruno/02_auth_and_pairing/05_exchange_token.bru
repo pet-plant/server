@@ -1,0 +1,32 @@
+meta {
+  name: 05 Exchange Device Token
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/devices/pair/token
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_code": "{{deviceCode}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.access_token: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    bru.setVar("deviceToken", res.body.access_token);
+  }
+}

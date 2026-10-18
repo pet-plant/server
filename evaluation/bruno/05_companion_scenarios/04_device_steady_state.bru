@@ -1,0 +1,22 @@
+meta {
+  name: 04 Edge Device Token Happy Path (Expect 200)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/companion/devices/me/state
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{deviceToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.success: eq true
+  res.body.data.plant_id: isDefined
+  res.body.data.state: isDefined
+}

@@ -1,0 +1,72 @@
+{
+  "version": "1.0.0",
+  "scope": "end_to_end",
+  "description": "End-to-end pipeline scenario specifications with mandatory pass/fail criteria.",
+  "scenarios": [
+    {
+      "name": "no_change",
+      "scenario_file": "scenarios/no_change.json",
+      "expected_file": "expected_outputs/scenario_no_change.json",
+      "mandatory_criteria": [
+        "pipeline_execution_without_exceptions",
+        "decisions_match_expected_sequence",
+        "fe_envelope_contract_validity",
+        "zero_care_plan_when_no_action"
+      ]
+    },
+    {
+      "name": "new_symptom",
+      "scenario_file": "scenarios/new_symptom.json",
+      "expected_file": "expected_outputs/scenario_new_symptom.json",
+      "mandatory_criteria": [
+        "pipeline_execution_without_exceptions",
+        "decisions_match_expected_sequence",
+        "fe_envelope_contract_validity",
+        "care_plan_populated_on_advice_required",
+        "care_actions_contain_valid_3nf_types"
+      ]
+    },
+    {
+      "name": "severity_increase",
+      "scenario_file": "scenarios/severity_increase.json",
+      "expected_file": "expected_outputs/scenario_severity_increase.json",
+      "mandatory_criteria": [
+        "pipeline_execution_without_exceptions",
+        "decisions_match_expected_sequence",
+        "fe_envelope_contract_validity",
+        "severity_escalation_triggers_advice"
+      ]
+    },
+    {
+      "name": "improvement",
+      "scenario_file": "scenarios/improvement.json",
+      "expected_file": "expected_outputs/scenario_improvement.json",
+      "mandatory_criteria": [
+        "pipeline_execution_without_exceptions",
+        "decisions_match_expected_sequence",
+        "fe_envelope_contract_validity",
+        "recovery_clears_care_plan"
+      ]
+    },
+    {
+      "name": "health_status_change",
+      "scenario_file": "scenarios/health_status_change.json",
+      "expected_file": "expected_outputs/scenario_health_status_change.json",
+      "mandatory_criteria": [
+        "pipeline_execution_without_exceptions",
+        "decisions_match_expected_sequence",
+        "fe_envelope_contract_validity"
+      ]
+    },
+    {
+      "name": "multi_day",
+      "scenario_file": "scenarios/milestone_lifecycle.json",
+      "expected_file": "expected_outputs/scenario_multi_day.json",
+      "mandatory_criteria": [
+        "pipeline_execution_without_exceptions",
+        "decisions_match_expected_sequence",
+        "fe_envelope_contract_validity"
+      ]
+    }
+  ]
+}
