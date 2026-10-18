@@ -143,6 +143,21 @@ def run_llm_evaluation(
             f"sem_sim={sem_sim:.1f}%  diff={diff_pct:.1f}%  "
             f"action_align={action_alignment:.1f}%  schema={'OK' if schema_valid else 'FAIL'}"
         )
+        # ── Per-case stage trace ────────────────────────────────────────────
+        ctx = input_context
+        print(f"       [INPUT]   health_status={ctx.get('health_status', '-')}  "
+              f"symptom={ctx.get('primary_symptom', '-')}  "
+              f"approved_actions={len(ctx.get('approved_actions', []))}")
+        act_actions_summary = ", ".join(
+            f"{a.get('type','?')}:{a.get('label','?')}" for a in act_actions
+        ) or "none"
+        print(f"       [LLM]     status_label={act_status or '-'}  "
+              f"actions=[{act_actions_summary}]")
+        print(f"       [LLM]     assessment={act_assessment[:120].replace(chr(10), ' ')!r}"
+              f"{'...' if len(act_assessment) > 120 else ''}")
+        print(f"       [METRICS] sem_sim={sem_sim:.1f}%  diff={diff_pct:.1f}%  "
+              f"lex_sim={lex_sim:.1f}%  action_align={action_alignment:.1f}%  "
+              f"schema={'OK' if schema_valid else 'FAIL'}")
         case_results.append(
             {
                 "case_id": case.get("id"),

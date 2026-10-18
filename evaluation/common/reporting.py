@@ -13,11 +13,23 @@ from pathlib import Path
 from typing import Any, Literal
 
 
+def is_latency_metric(name: str) -> bool:
+    """Determine if a metric represents duration or latency in milliseconds."""
+    name_lower = name.lower()
+    return (
+        name_lower.endswith("_ms")
+        or name_lower.startswith("ms_")
+        or "_ms_" in name_lower
+        or "latency" in name_lower
+        or "duration" in name_lower
+    )
+
+
 def is_percentage_metric(name: str) -> bool:
     """Determine if a metric represents a percentage or fractional rate."""
-    name_lower = name.lower()
-    if "ms" in name_lower or "latency" in name_lower:
+    if is_latency_metric(name):
         return False
+    name_lower = name.lower()
     return any(
         kw in name_lower
         for kw in (
@@ -31,6 +43,8 @@ def is_percentage_metric(name: str) -> bool:
             "compliance",
             "alignment",
             "overlap",
+            "precision",
+            "recall",
         )
     )
 
@@ -39,8 +53,7 @@ def format_metric_value(name: str, value: Any) -> str:
     """Format metric value clearly, appending % or ms when applicable."""
     if not isinstance(value, (int, float)):
         return str(value)
-    name_lower = name.lower()
-    if "ms" in name_lower or "latency" in name_lower:
+    if is_latency_metric(name):
         return f"{value:.2f}ms"
     if is_percentage_metric(name):
         # Convert 0.0-1.0 normalized ratios (like accuracy, f1, iou) into 0-100%
@@ -68,7 +81,7 @@ def format_metric_threshold(name: str, threshold: float | None) -> str:
     if threshold is None:
         return "-"
     name_lower = name.lower()
-    if "ms" in name_lower or "latency" in name_lower:
+    if is_latency_metric(name):
         return f"<= {threshold:.0f}ms"
     if is_percentage_metric(name):
         if (
@@ -173,6 +186,91 @@ def _compute_case_averages(
     return avgs
 
 
+def _generate_confusion_matrices(case_results: list[dict[str, Any]]) -> list[str]:
+    """Generate Markdown confusion matrices for health status and probe classification."""
+    lines: list[str] = []
+
+    # 1. Health Status Multi-Class Confusion Matrix
+    has_health_status = any(
+        "expected_health_status" in c and "actual_health_status" in c
+        for c in case_results
+    )
+    if has_health_status:
+        all_classes_set: set[str] = set()
+        for c in case_results:
+            if c.get("expected_health_status"):
+                all_classes_set.add(str(c["expected_health_status"]))
+            if c.get("actual_health_status"):
+                all_classes_set.add(str(c["actual_health_status"]))
+
+        canonical_order = ["healthy", "possibly_unhealthy", "unhealthy"]
+        classes = [cls for cls in canonical_order if cls in all_classes_set]
+        classes += sorted(all_classes_set - set(classes))
+
+        matrix: dict[str, dict[str, int]] = {
+            exp: {act: 0 for act in classes}
+            for exp in classes
+        }
+        for c in case_results:
+            exp = str(c.get("expected_health_status", ""))
+            act = str(c.get("actual_health_status", ""))
+            if exp in matrix and act in matrix[exp]:
+                matrix[exp][act] += 1
+
+        lines.append("#### Health Status Multi-Class Confusion Matrix")
+        lines.append("")
+        header = "| Expected \\ Actual | " + " | ".join(f"`{cls}`" for cls in classes) + " | Total |"
+        separator = "|---|" + "|".join("---" for _ in classes) + "|---|"
+        lines.append(header)
+        lines.append(separator)
+
+        col_totals = {act: 0 for act in classes}
+        grand_total = 0
+
+        for exp in classes:
+            row_vals = []
+            row_sum = 0
+            for act in classes:
+                val = matrix[exp][act]
+                row_sum += val
+                col_totals[act] += val
+                row_vals.append(str(val))
+            grand_total += row_sum
+            lines.append(f"| **`{exp}`** | " + " | ".join(row_vals) + f" | **{row_sum}** |")
+
+        totals_row = "| **Total** | " + " | ".join(f"**{col_totals[act]}**" for act in classes) + f" | **{grand_total}** |"
+        lines.append(totals_row)
+        lines.append("")
+
+    # 2. Binary Probe Findings Confusion Matrix
+    has_probes = any(
+        "expected_probe" in c and "actual_probe" in c
+        for c in case_results
+    )
+    if has_probes:
+        tp = sum(1 for c in case_results if str(c.get("expected_probe", "")).strip().lower() == "yes" and str(c.get("actual_probe", "")).strip().lower() == "yes")
+        fp = sum(1 for c in case_results if str(c.get("expected_probe", "")).strip().lower() == "no" and str(c.get("actual_probe", "")).strip().lower() == "yes")
+        fn = sum(1 for c in case_results if str(c.get("expected_probe", "")).strip().lower() == "yes" and str(c.get("actual_probe", "")).strip().lower() == "no")
+        tn = sum(1 for c in case_results if str(c.get("expected_probe", "")).strip().lower() == "no" and str(c.get("actual_probe", "")).strip().lower() == "no")
+
+        total_actual_pos = tp + fn
+        total_actual_neg = fp + tn
+        total_pred_pos = tp + fp
+        total_pred_neg = fn + tn
+        total_probes = total_actual_pos + total_actual_neg
+
+        lines.append("#### Probe Findings Binary Confusion Matrix (Yes/No)")
+        lines.append("")
+        lines.append("| Actual \\ Predicted | Predicted Positive (Yes) | Predicted Negative (No) | Total |")
+        lines.append("|---|---|---|---|")
+        lines.append(f"| **Actual Positive (Yes)** | **{tp}** (TP) | **{fn}** (FN) | **{total_actual_pos}** |")
+        lines.append(f"| **Actual Negative (No)** | **{fp}** (FP) | **{tn}** (TN) | **{total_actual_neg}** |")
+        lines.append(f"| **Total** | **{total_pred_pos}** | **{total_pred_neg}** | **{total_probes}** |")
+        lines.append("")
+
+    return lines
+
+
 def print_scope_aggregate(res: "ScopeExecutionResult") -> None:
     """Print a formatted aggregation score block for a scope to the terminal."""
     scope = res.scope_name.upper()
@@ -200,6 +298,37 @@ def print_scope_aggregate(res: "ScopeExecutionResult") -> None:
             label = m.name.replace("_", " ").title()
             print(f"  {icon} {label:<36} {val_str:>8}  {thresh_str:>10}  {m.status}")
 
+    # ── Confusion matrices (if classification scope) ─────────────────
+    if res.case_results:
+        has_health_status = any(
+            "expected_health_status" in c and "actual_health_status" in c
+            for c in res.case_results
+        )
+        if has_health_status:
+            all_classes_set = set()
+            for c in res.case_results:
+                if c.get("expected_health_status"):
+                    all_classes_set.add(str(c["expected_health_status"]))
+                if c.get("actual_health_status"):
+                    all_classes_set.add(str(c["actual_health_status"]))
+            canonical_order = ["healthy", "possibly_unhealthy", "unhealthy"]
+            classes = [cls for cls in canonical_order if cls in all_classes_set]
+            classes += sorted(all_classes_set - set(classes))
+            matrix = {exp: {act: 0 for act in classes} for exp in classes}
+            for c in res.case_results:
+                exp = str(c.get("expected_health_status", ""))
+                act = str(c.get("actual_health_status", ""))
+                if exp in matrix and act in matrix[exp]:
+                    matrix[exp][act] += 1
+            print(f"  {'-' * width}")
+            print("  Confusion Matrix (Health Status):")
+            print(f"  {'-' * width}")
+            header_str = "    Exp \\ Pred".ljust(22) + "".join(f"{cls[:11]:>12}" for cls in classes)
+            print(header_str)
+            for exp in classes:
+                row_str = f"    {exp[:18]:<18}  " + "".join(f"{matrix[exp][act]:>12}" for act in classes)
+                print(row_str)
+
     # ── Case-level averages (computed from raw results) ───────────────
     if res.case_results:
         case_avgs = _compute_case_averages(res.case_results)
@@ -216,6 +345,7 @@ def print_scope_aggregate(res: "ScopeExecutionResult") -> None:
                 else:
                     unit = "%"
                 print(f"    {label:<34} {avg_val:>8.2f}{unit}")
+
 
     # ── Endpoints / pipeline stages called ───────────────────────
     if res.called_endpoints:
@@ -381,11 +511,18 @@ def generate_markdown_summary(summary: EvaluationRunSummary) -> str:
             lines.append(f"| `{m.name}` | {val_str} | {thresh_str} | **{m.status}** | {reason_str} |")
         lines.append("")
 
+
+        # Add Confusion Matrices for classification scopes (e.g. VLM)
+        confusion_lines = _generate_confusion_matrices(res.case_results)
+        if confusion_lines:
+            lines.extend(confusion_lines)
+
         # Add Per-Case Response Comparison & Difference Table for scopes with candidate comparison
         has_text_comparison = any(
             "semantic_similarity_pct" in c or "response_difference_pct" in c
             for c in res.case_results
         )
+
         if has_text_comparison:
             lines.append(f"#### `{scope_name}` Response Similarity & Difference Breakdown")
             lines.append("")
@@ -437,9 +574,10 @@ def write_run_report(
     summary: EvaluationRunSummary,
     reports_base_dir: Path,
     keep_latest: bool = True,
+    run_log: str | None = None,
 ) -> Path:
     """
-    Write summary.json, summary.md, and per-scope JSONL files.
+    Write summary.json, summary.md, per-scope JSONL files, and an optional run.log.
     Optionally mirrors latest report into reports_base_dir / 'latest'.
     """
     run_dir = reports_base_dir / summary.run_id
@@ -463,7 +601,14 @@ def write_run_report(
                 for case in res.case_results:
                     f.write(json.dumps(case) + "\n")
 
-    # 4. Mirror to 'latest/'
+    # 4. Write run.log — full captured stdout for this run
+    log_path: Path | None = None
+    if run_log is not None:
+        log_path = run_dir / "run.log"
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(run_log)
+
+    # 5. Mirror to 'latest/'
     if keep_latest:
         latest_dir = reports_base_dir / "latest"
         latest_dir.mkdir(parents=True, exist_ok=True)
@@ -473,5 +618,7 @@ def write_run_report(
             if res.case_results:
                 src_jsonl = run_dir / f"{scope_name}.jsonl"
                 shutil.copy2(src_jsonl, latest_dir / f"{scope_name}.jsonl")
+        if log_path is not None:
+            shutil.copy2(log_path, latest_dir / "run.log")
 
     return run_dir
