@@ -311,8 +311,8 @@ Relevant environment variables (full list in `.env.example`):
 
 | Variable | Meaning |
 |----------|---------|
-| `VLM_PROVIDER` | `vllm` (default) or `local` |
-| `VLM_API_BASE` / `VLM_API_KEY` | OpenAI-compatible vLLM endpoint |
+| `VLM_PROVIDER` | `vllm` (default), `local`, or `http` |
+| `VLM_API_BASE` / `VLM_API_KEY` | OpenAI-compatible vLLM endpoint, or for `http` the base of a `POST /generate` server (`{"prompt", "images_base64"}` → `{"response"}`) |
 | `VLM_LOCAL_MODEL_PATH` | Weights for `local` (default `models/internvl3_5-2b`; missing weights download `OpenGVLab/InternVL3_5-2B-HF`) |
 | `LLM_PROVIDER` | `openai` (default) or `ollama` for chat models |
 

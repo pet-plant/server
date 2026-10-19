@@ -723,6 +723,7 @@ def settings(**values: str) -> SimpleNamespace:
         "vlm_provider": "vllm",
         "vlm_api_base": "http://vlm:8000/v1",
         "vlm_api_key": "",
+        "vlm_api_timeout_seconds": 120.0,
         "vlm_local_model_path": "models/internvl3_5-2b",
     }
     return SimpleNamespace(**{**base, **values})
@@ -732,6 +733,7 @@ def settings(**values: str) -> SimpleNamespace:
     ("provider", "expected"),
     [
         ("vllm", backends.VLLMBackend),
+        ("http", backends.GenerateAPIBackend),
         ("local", backends.LocalTransformersBackend),
         (" Local ", backends.LocalTransformersBackend),
     ],
@@ -946,6 +948,63 @@ def test_vllm_connection_failure_becomes_backend_unavailable(
 
     monkeypatch.setattr(backends, "ChatOpenAI", Unreachable)
     backend = backends.VLLMBackend(api_base="http://vlm:8000/v1", api_key="k")
+
+    with pytest.raises(backends.VLMBackendUnavailableError):
+        backend.generate("p", [b"a"], model="m", temperature=0.0, max_new_tokens=8)
+
+
+def test_generate_api_posts_the_prompt_and_both_images_as_base64(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    calls: list[dict[str, Any]] = []
+
+    def post(url: str, **kwargs: Any) -> httpx.Response:
+        calls.append({"url": url, **kwargs})
+        request = httpx.Request("POST", url)
+        return httpx.Response(200, json={"response": '{"ok": true}'}, request=request)
+
+    monkeypatch.setattr(backends.httpx, "post", post)
+    backend = backends.GenerateAPIBackend("http://100.1.2.3:8000/", api_key="k", timeout=30)
+
+    text = backend.generate(
+        "Describe.", [b"\x01", b"\x02"], model="m-1", temperature=0.3, max_new_tokens=520
+    )
+
+    assert text == '{"ok": true}'
+    (call,) = calls
+    assert call["url"] == "http://100.1.2.3:8000/generate"
+    assert call["json"]["prompt"] == "Describe."
+    assert call["json"]["images_base64"] == ["AQ==", "Ag=="]
+    assert call["json"]["model"] == "m-1"
+    assert call["headers"] == {"Authorization": "Bearer k"}
+    assert call["timeout"] == 30
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "unreachable",
+        "http_error",
+        "no_response_field",
+    ],
+)
+def test_generate_api_failures_become_backend_unavailable(
+    outcome: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    def post(url: str, **kwargs: Any) -> httpx.Response:
+        request = httpx.Request("POST", url)
+        if outcome == "unreachable":
+            raise httpx.ConnectError("refused", request=request)
+        if outcome == "http_error":
+            return httpx.Response(500, text="boom", request=request)
+        return httpx.Response(200, json={"text": "x"}, request=request)
+
+    monkeypatch.setattr(backends.httpx, "post", post)
+    backend = backends.GenerateAPIBackend("http://100.1.2.3:8000")
 
     with pytest.raises(backends.VLMBackendUnavailableError):
         backend.generate("p", [b"a"], model="m", temperature=0.0, max_new_tokens=8)

@@ -1,0 +1,13 @@
+# BuildKit reads this instead of the root .dockerignore when building
+# docker/Dockerfile.remote. The image copies only src/, config/, alembic/ and
+# the root files it names, so everything else stays out of the build context.
+*
+!pyproject.toml
+!uv.lock
+!.env.example
+!alembic.ini
+!src/
+!config/
+!alembic/
+**/__pycache__/
+**/*.py[cod]
