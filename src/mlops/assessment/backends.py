@@ -14,6 +14,9 @@ knows nor cares which ran.
   first load downloads ``OpenGVLab/InternVL3_5-2B-HF`` into it.
 - ``vllm`` — :class:`VLLMBackend`, an OpenAI-compatible server at
   ``VLM_API_BASE``. For servers and production.
+- ``http`` — :class:`GenerateAPIBackend`, a plain ``POST {VLM_API_BASE}/generate``
+  server (e.g. a SageMaker host reached over Tailscale) that takes the prompt
+  and base64 images as JSON and answers ``{"response": "..."}``.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
 import openai
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
@@ -426,16 +430,68 @@ class VLLMBackend:
         )
 
 
+class GenerateAPIBackend:
+    """A ``POST /generate`` server: JSON in, ``{"response": text}`` out.
+
+    Request body: ``prompt``, ``images_base64`` (JPEGs in prompt order: previous
+    then current), and ``model`` / ``temperature`` / ``max_new_tokens``, which
+    the server may honour or ignore. ``VLM_API_KEY``, when set, goes out as a
+    bearer token.
+    """
+
+    def __init__(self, api_base: str, api_key: str = "", timeout: float = 120.0) -> None:
+        self.url = api_base.rstrip("/") + "/generate"
+        self.api_key = api_key
+        self.timeout = timeout
+
+    def generate(
+        self,
+        prompt: str,
+        images: list[bytes],
+        *,
+        model: str,
+        temperature: float,
+        max_new_tokens: int,
+    ) -> str:
+        payload = {
+            "prompt": prompt,
+            "images_base64": [base64.b64encode(data).decode("ascii") for data in images],
+            "model": model,
+            "temperature": temperature,
+            "max_new_tokens": max_new_tokens,
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        try:
+            response = httpx.post(self.url, json=payload, headers=headers, timeout=self.timeout)
+            response.raise_for_status()
+            text = response.json()["response"]
+        except httpx.HTTPError as error:
+            raise VLMBackendUnavailableError(f"VLM server at {self.url} failed: {error}") from error
+        except (ValueError, KeyError, TypeError) as error:
+            raise VLMBackendUnavailableError(
+                f"VLM server at {self.url} returned no 'response' field: {error}"
+            ) from error
+        if not isinstance(text, str):
+            raise VLMBackendUnavailableError(
+                f"VLM server at {self.url} returned a non-text response"
+            )
+        return text
+
+
 def get_vlm_backend() -> VLMBackend:
     """The backend ``VLM_PROVIDER`` names."""
     settings = get_settings()
     provider = (settings.vlm_provider or "").strip().lower()
     if provider == "local":
         return _select_local_backend(settings.vlm_local_model_path)
-    if provider == "vllm":
+    if provider in ("vllm", "http"):
         if not settings.vlm_api_base:
-            raise VLMBackendUnavailableError("VLM_PROVIDER=vllm but VLM_API_BASE is not set")
+            raise VLMBackendUnavailableError(f"VLM_PROVIDER={provider} but VLM_API_BASE is not set")
+        if provider == "http":
+            return GenerateAPIBackend(
+                settings.vlm_api_base, settings.vlm_api_key, settings.vlm_api_timeout_seconds
+            )
         return VLLMBackend(settings.vlm_api_base, settings.vlm_api_key)
     raise VLMBackendUnavailableError(
-        f"unknown VLM_PROVIDER {settings.vlm_provider!r}; expected 'local' or 'vllm'"
+        f"unknown VLM_PROVIDER {settings.vlm_provider!r}; expected 'local', 'vllm' or 'http'"
     )

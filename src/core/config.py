@@ -86,11 +86,14 @@ class Settings(BaseSettings):
 
     # --- VLM (images; used by `mlops.assessment`) ---
     # "local" runs transformers in-process from `vlm_local_model_path`; "vllm"
-    # calls an OpenAI-compatible server at `vlm_api_base`. As with the LLM, no
-    # model name lives here: it comes from the Langfuse prompt version's `config`.
+    # calls an OpenAI-compatible server at `vlm_api_base`; "http" posts to
+    # `{vlm_api_base}/generate`. As with the LLM, no model name lives here: it
+    # comes from the Langfuse prompt version's `config`.
     vlm_provider: str = "vllm"
     vlm_api_base: str = ""
     vlm_api_key: str = ""
+    # Per request, for "http". One request is one run over both frames.
+    vlm_api_timeout_seconds: float = 120.0
     vlm_local_model_path: str = "models/internvl3_5-2b"
 
     # --- Langfuse (prompt management, tracing, datasets; used by `mlops`) ---

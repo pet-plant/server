@@ -19,7 +19,7 @@ name: pet-plant
 #
 # Self-hosted inference (VLM served with vLLM, segmentation) runs on separate
 # infrastructure and is NOT part of this file — point VLM_API_BASE /
-# SEGMENTATION_ENDPOINT at it via .env when VLM_PROVIDER=vllm. The local
+# SEGMENTATION_ENDPOINT at it via .env when VLM_PROVIDER=vllm (or http). The local
 # assessment backend loads InternVL weights from ./models. A missing model is
 # downloaded on the first probe (OpenGVLab/InternVL3_5-2B-HF). Photos are uploaded
 # over HTTP by a device or client; no webcam is attached to this server container.
@@ -82,7 +82,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://petplant:petplant@postgres:5432/petplant
       MINIO_ENDPOINT: minio:9000
-      VLM_PROVIDER: local
+      VLM_PROVIDER: ${VLM_PROVIDER:-local}
       VLM_LOCAL_MODEL_PATH: models/internvl3_5-2b
     ports:
       - "8000:8000"
