@@ -3,11 +3,43 @@
 from __future__ import annotations
 
 import argparse
+import io
 import sys
 import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+
+class _TeeWriter(io.TextIOBase):
+    """Write to *real* stdout and an in-memory buffer at the same time.
+
+    Used during ``cmd_run`` so the operator sees live progress while every
+    printed line is also captured for ``run.log``.
+    """
+
+    def __init__(self, real: io.TextIOBase) -> None:
+        self._real = real
+        self._buf = io.StringIO()
+
+    def write(self, s: str) -> int:  # type: ignore[override]
+        self._real.write(s)
+        self._buf.write(s)
+        return len(s)
+
+    def flush(self) -> None:
+        self._real.flush()
+        self._buf.flush()
+
+    def getvalue(self) -> str:
+        return self._buf.getvalue()
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+_SRC_DIR = _REPO_ROOT / "src"
+if _SRC_DIR.exists() and str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 import evaluation
 from evaluation.common.config import EvaluationConfig
@@ -97,6 +129,20 @@ def cmd_validate(config: EvaluationConfig) -> int:
     except ImportError as e:
         print(f"  [SKIP] Sample Knowledge: dependencies unavailable ({e})")
 
+    # 5. Final condition dataset
+    final_dir = base_datasets / "final"
+    eval_jsonl = final_dir / "eval.jsonl"
+    species_json = final_dir / "species.json"
+    if eval_jsonl.exists() and species_json.exists():
+        try:
+            from evaluation.vlm.final_dataset import load_final_dataset
+            ds = load_final_dataset(final_dir, verify_images=False)
+            print(f"  [PASS] Final Dataset: {len(ds)} samples across {len(ds.species_meta)} species")
+        except Exception as err:
+            errors.append(f"Final Dataset: {err}")
+    else:
+        print("  [WARN] Final Dataset: eval.jsonl or species.json not found")
+
     if errors:
         print("\nValidation Failed with errors:", file=sys.stderr)
         for err in errors:
@@ -172,53 +218,69 @@ def cmd_run(args: argparse.Namespace, config: EvaluationConfig) -> int:
         "execution_mode": config.execution_mode,
     }
 
-    print(f"Starting evaluation run [{run_id}]...")
-    print(f"Scopes: {', '.join(scopes_to_run)}")
-    print(f"Mode: {config.execution_mode} | Models: VLM={models_used['vlm_model']}, LLM={models_used['llm_model']}")
-    print(f"Options: fast_mode={config.fast_mode}, enable_judge={config.enable_judge}\n")
+    # -- Tee stdout so every printed line goes to the terminal AND a buffer
+    #    that we'll write as run.log when the report is saved.
+    tee = _TeeWriter(sys.stdout)  # type: ignore[arg-type]
+    sys.stdout = tee  # type: ignore[assignment]
+    try:
+        print(f"Starting evaluation run [{run_id}]...")
+        print(f"Scopes: {', '.join(scopes_to_run)}")
+        print(f"Mode: {config.execution_mode} | Models: VLM={models_used['vlm_model']}, LLM={models_used['llm_model']}")
+        print(f"Options: fast_mode={config.fast_mode}, enable_judge={config.enable_judge}\n")
 
-    scope_results: dict[str, ScopeExecutionResult] = {}
-    any_failed = False
+        scope_results: dict[str, ScopeExecutionResult] = {}
+        any_failed = False
 
-    for scope_name in scopes_to_run:
-        runner_fn = SCOPE_RUNNERS[scope_name]
-        print(f"\n--- Running scope: {scope_name} ---")
-        try:
-            res = runner_fn(config)
-            scope_results[scope_name] = res
-            print(f"--- Scope {scope_name}: [{res.status}] ({res.passed_cases}/{res.total_cases} cases, {res.duration_seconds:.2f}s) ---")
-            if res.status == "FAIL":
+        for scope_name in scopes_to_run:
+            runner_fn = SCOPE_RUNNERS[scope_name]
+            print(f"\n--- Running scope: {scope_name} ---")
+            try:
+                res = runner_fn(config)
+                scope_results[scope_name] = res
+                print(f"--- Scope {scope_name}: [{res.status}] ({res.passed_cases}/{res.total_cases} cases, {res.duration_seconds:.2f}s) ---")
+                if res.status == "FAIL":
+                    any_failed = True
+            except Exception as e:
+                print(f"[ERROR] {e}")
+                scope_results[scope_name] = ScopeExecutionResult(
+                    scope_name=scope_name,
+                    status="FAIL",
+                    duration_seconds=0.0,
+                    total_cases=0,
+                    passed_cases=0,
+                    skip_reason=f"Crash during execution: {e}",
+                )
                 any_failed = True
-        except Exception as e:
-            print(f"[ERROR] {e}")
-            scope_results[scope_name] = ScopeExecutionResult(
-                scope_name=scope_name,
-                status="FAIL",
-                duration_seconds=0.0,
-                total_cases=0,
-                passed_cases=0,
-                skip_reason=f"Crash during execution: {e}",
-            )
-            any_failed = True
 
-    total_duration = time.perf_counter() - start_time
-    overall_status = "FAIL" if any_failed else "PASS"
+        total_duration = time.perf_counter() - start_time
+        overall_status = "FAIL" if any_failed else "PASS"
 
-    summary = EvaluationRunSummary(
-        run_id=run_id,
-        timestamp_utc=datetime.now(UTC).isoformat(),
-        duration_seconds=total_duration,
-        overall_status=overall_status,
-        scopes=scope_results,
-        git_commit=get_git_commit(),
-        models_used=models_used,
+        summary = EvaluationRunSummary(
+            run_id=run_id,
+            timestamp_utc=datetime.now(UTC).isoformat(),
+            duration_seconds=total_duration,
+            overall_status=overall_status,
+            scopes=scope_results,
+            git_commit=get_git_commit(),
+            models_used=models_used,
+        )
+
+        print(f"\n=======================================================")
+        print(f"Evaluation Run Completed: {overall_status}")
+        print(f"Active Models: {models_used}")
+    finally:
+        # Always restore stdout before writing the report so any file-write
+        # errors print normally and the tee buffer is fully flushed.
+        sys.stdout = tee._real
+
+    captured_log = tee.getvalue()
+    out_dir = write_run_report(
+        summary,
+        config.reports_dir,
+        keep_latest=config.keep_latest,
+        run_log=captured_log,
     )
 
-    out_dir = write_run_report(summary, config.reports_dir, keep_latest=config.keep_latest)
-
-    print(f"\n=======================================================")
-    print(f"Evaluation Run Completed: {overall_status}")
-    print(f"Active Models: {models_used}")
     print(f"Report Directory: {out_dir}")
     if config.keep_latest:
         print(f"Latest Mirror:    {config.reports_dir / 'latest'}")
@@ -257,8 +319,6 @@ def cmd_evaluate_photos(args: argparse.Namespace, config: EvaluationConfig) -> i
     print(f"Failed Photos:          {failed}")
     print("-" * 65)
     print("AVERAGE METRIC RESULTS ACROSS ALL PHOTOS:")
-    print(f"  - Average Semantic Similarity:  {summary['avg_semantic_similarity_pct']:.2f}%")
-    print(f"  - Average Response Difference:  {summary['avg_response_difference_pct']:.2f}%")
     print(f"  - Average Structured F1 Score:  {summary['avg_f1_score']:.2f}%")
     print(f"  - Average Precision:            {summary['avg_precision']:.2f}%")
     print(f"  - Average Recall:               {summary['avg_recall']:.2f}%")
@@ -268,15 +328,32 @@ def cmd_evaluate_photos(args: argparse.Namespace, config: EvaluationConfig) -> i
     print("\nPER-PHOTO CRITERIA BREAKDOWN:")
     for p in summary.get("photo_details", []):
         status_tag = "[PASS]" if p["passed"] else "[FAIL]"
-        sim = p.get("semantic_similarity_pct", 0.0)
-        diff = p.get("response_difference_pct", 0.0)
+        acc = p.get("accuracy", 0.0)
         f1 = p.get("f1_score", 0.0)
-        print(f"  {status_tag} {p['filename']:<28} | Sim: {sim:>5.1f}% | Diff: {diff:>5.1f}% | F1: {f1:>5.1f}%")
+        prec = p.get("precision", 0.0)
+        rec = p.get("recall", 0.0)
+        print(f"  {status_tag} {p['filename']:<28} | Acc: {acc:>5.1f}% | F1: {f1:>5.1f}% | Prec: {prec:>5.1f}% | Rec: {rec:>5.1f}%")
         if not p["passed"] and "error" in p:
             print(f"         Reason: {p['error']}")
 
     print("=" * 65 + "\n")
     return 0 if failed == 0 else 1
+
+
+def cmd_evaluate_final(args: argparse.Namespace, config: EvaluationConfig) -> int:
+    """Run VLM condition evaluation on the 505-sample final houseplant benchmark dataset."""
+    from evaluation.vlm.run import run_final_dataset_evaluation
+
+    res = run_final_dataset_evaluation(
+        config=config,
+        dataset_dir=args.dataset_dir,
+        limit=args.limit,
+        predictions_file=args.predictions_file,
+        use_mock=args.use_mock,
+        results_json_path=args.results_json,
+    )
+    return 0 if res.status == "PASS" else 1
+
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -367,6 +444,41 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional custom manifest path with ground-truth criteria per photo.",
     )
 
+    # 7. evaluate-final command
+    p_final = subparsers.add_parser(
+        "evaluate-final",
+        help="Run VLM evaluation on final 505-sample houseplant condition dataset (health_status & symptoms).",
+    )
+    p_final.add_argument(
+        "--dataset-dir",
+        type=Path,
+        default=None,
+        help="Path to final dataset directory containing eval.jsonl, species.json, images/.",
+    )
+    p_final.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Optional maximum number of samples to evaluate (e.g. 5 or 10).",
+    )
+    p_final.add_argument(
+        "--predictions-file",
+        type=Path,
+        default=None,
+        help="Custom path to cached predictions JSONL.",
+    )
+    p_final.add_argument(
+        "--use-mock",
+        action="store_true",
+        help="Use simulated mock predictions without calling live VLM backend.",
+    )
+    p_final.add_argument(
+        "--results-json",
+        type=Path,
+        default=None,
+        help="Custom output file for detailed evaluation metrics JSON.",
+    )
+
     args = parser.parse_args(argv)
     config = EvaluationConfig.load()
 
@@ -380,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
         return res
     elif args.command == "evaluate-photos":
         return cmd_evaluate_photos(args, config)
+    elif args.command == "evaluate-final":
+        return cmd_evaluate_final(args, config)
     elif args.command == "validate":
         return cmd_validate(config)
     elif args.command == "clean":

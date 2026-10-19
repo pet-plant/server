@@ -13,7 +13,7 @@ One **run** is one plant going through the pipeline for one schedule slot
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Text, UniqueConstraint, Uuid
+from sqlalchemy import DateTime, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from orchestrator.db import ORCHESTRATOR_SCHEMA, Base, utcnow
@@ -33,9 +33,9 @@ class PipelineRun(Base):
     # The schedule slot (UTC) this run belongs to; ``now`` for a manual run.
     scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # 'schedule' | 'manual'
-    trigger: Mapped[str] = mapped_column(Text, nullable=False, default="schedule")
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="queued", index=True)
-    current_stage: Mapped[str] = mapped_column(Text, nullable=False)
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False, default="schedule")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", index=True)
+    current_stage: Mapped[str] = mapped_column(String(32), nullable=False)
     # Why it ended the way it did: the error, or the skip reason.
     detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from evaluation.common.config import EvaluationConfig
-from evaluation.common.metrics import calculate_text_similarity
 from evaluation.common.reporting import MetricResult, ScopeExecutionResult, print_scope_aggregate
 from evaluation.vlm.metrics import (
     aggregate_batch_photo_metrics,
@@ -44,8 +43,6 @@ def evaluate_single_photo_criteria(
             "filename": image_path.name,
             "passed": False,
             "error": "Image file not found",
-            "semantic_similarity_pct": 0.0,
-            "response_difference_pct": 100.0,
             "f1_score": 0.0,
             "precision": 0.0,
             "recall": 0.0,
@@ -60,8 +57,6 @@ def evaluate_single_photo_criteria(
             "filename": image_path.name,
             "passed": False,
             "error": "Image file is empty or corrupted (size < 100 bytes)",
-            "semantic_similarity_pct": 0.0,
-            "response_difference_pct": 100.0,
             "f1_score": 0.0,
             "precision": 0.0,
             "recall": 0.0,
@@ -112,20 +107,11 @@ def evaluate_single_photo_criteria(
         recall = probe_metrics["recall"]
         accuracy = probe_metrics["accuracy"]
 
-    # 3. Text similarity and difference
-    sim_res = calculate_text_similarity(
-        expected=expected_assessment,
-        actual=actual_assessment,
-    )
-    sem_sim = sim_res["semantic_similarity"]
-    diff_pct = sim_res["response_difference"]
-
     # Criteria passing logic
     status_match = expected_status == actual_status
-    similarity_passed = sem_sim >= config.llm_min_similarity and diff_pct <= config.llm_max_difference
     classification_passed = f1 >= 80.0 if (expected_symptoms or expected_probes) else True
 
-    passed = status_match and similarity_passed and classification_passed
+    passed = status_match and classification_passed
 
     return {
         "image_path": str(image_path),
@@ -135,17 +121,14 @@ def evaluate_single_photo_criteria(
         "status_match": status_match,
         "expected_health_status": expected_status,
         "actual_health_status": actual_status,
-        "semantic_similarity_pct": sem_sim,
-        "response_difference_pct": diff_pct,
         "f1_score": f1,
         "precision": precision,
         "recall": recall,
         "accuracy": accuracy,
         "symptom_metrics": symptom_metrics,
         "probe_metrics": probe_metrics,
-        "expected_assessment": expected_assessment,
-        "actual_assessment": actual_assessment,
     }
+
 
 
 def evaluate_batch_photos(
@@ -209,248 +192,169 @@ def evaluate_batch_photos(
 
 def run_vlm_evaluation(
     config: EvaluationConfig,
+    dataset_dir: Path | str | None = None,
+    limit: int | None = None,
+    predictions_file: Path | str | None = None,
+    use_mock: bool | None = None,
+    results_json_path: Path | str | None = None,
     manifest_path: Path | None = None,
     photos_dir: Path | None = None,
 ) -> ScopeExecutionResult:
-    """Execute VLM plant symptom analysis evaluation with similarity, difference, and classification metrics."""
+    """Execute VLM plant condition assessment evaluation on evaluation/datasets/final.
+
+    Evaluates:
+    1. health_status (binary classification: healthy vs unhealthy)
+    2. botanical symptoms (multi-label classification: micro & macro F1)
+    """
+    from evaluation.vlm.final_dataset import load_final_dataset
+    from evaluation.vlm.metrics import evaluate_final_dataset_metrics, normalize_health_status
+    from evaluation.vlm.predictor import FinalDatasetPredictor
+
     start_time = time.perf_counter()
+    if dataset_dir is None:
+        dataset_dir = DATASET_ROOT / "final"
 
-    if manifest_path is None:
-        manifest_path = DATASET_ROOT / "vlm" / "scenarios.json"
+    dataset = load_final_dataset(dataset_dir)
 
-    if not manifest_path.exists():
-        return ScopeExecutionResult(
-            scope_name="vlm",
-            status="SKIPPED",
-            duration_seconds=round(time.perf_counter() - start_time, 3),
-            total_cases=0,
-            passed_cases=0,
-            skip_reason=f"VLM scenario file not found: {manifest_path}",
-        )
+    is_mock = use_mock if use_mock is not None else getattr(config, "fast_mode", False)
+    if is_mock and limit is None:
+        limit = 20
 
-    with open(manifest_path, encoding="utf-8") as f:
-        data = json.load(f)
+    samples_to_eval = dataset.samples[:limit] if limit else dataset.samples
+    total_eval = len(samples_to_eval)
 
-    cases = data.get("cases", [])
-    if not cases:
-        return ScopeExecutionResult(
-            scope_name="vlm",
-            status="SKIPPED",
-            duration_seconds=round(time.perf_counter() - start_time, 3),
-            total_cases=0,
-            passed_cases=0,
-            skip_reason="No test cases in VLM scenarios file.",
-        )
+    print(f"\n=======================================================")
+    print(f"  [vlm] Evaluating {total_eval} of {len(dataset)} final dataset samples...")
+    print(f"=======================================================")
 
-    case_results: list[dict[str, Any]] = []
-    passed_cases = 0
-
-    sem_sims: list[float] = []
-    lex_sims: list[float] = []
-    resp_diffs: list[float] = []
-    f1_scores: list[float] = []
-    precisions: list[float] = []
-    recalls: list[float] = []
-    accuracies: list[float] = []
-    probe_matches = 0
-
-    total = len(cases)
-    print(f"  [vlm] Running {total} case(s)...")
-
-    for case_idx, case in enumerate(cases, 1):
-        expected = case.get("expected_response", {})
-        actual = case.get("actual_response", {})
-
-        exp_assessment = expected.get("assessment", "")
-        act_assessment = actual.get("assessment", "")
-
-        # 1. Health status match
-        exp_status = expected.get("health_status", "")
-        act_status = actual.get("health_status", "")
-        status_match = exp_status == act_status
-
-        # 2. Probe answer match
-        exp_probe = expected.get("probe_answer", "")
-        act_probe = actual.get("probe_answer", "")
-        probe_match = exp_probe == act_probe
-        if probe_match:
-            probe_matches += 1
-
-        # 3. Text Similarity & Difference calculation
-        sim_res = calculate_text_similarity(
-            expected=exp_assessment,
-            actual=act_assessment,
-        )
-
-        sem_sim = sim_res["semantic_similarity"]
-        lex_sim = sim_res["lexical_similarity"]
-        diff_pct = sim_res["response_difference"]
-
-        sem_sims.append(sem_sim)
-        lex_sims.append(lex_sim)
-        resp_diffs.append(diff_pct)
-
-        # 4. Structured JSON Classification Metrics (Probe & Symptoms)
-        probe_slug = case.get("probe_context", {}).get("slug", "probe")
-        probe_res = evaluate_probe_findings(
-            expected_probes=[{"slug": probe_slug, "answer": exp_probe}],
-            actual_probes=[{"slug": probe_slug, "answer": act_probe}],
-        )
-
-        f1_scores.append(probe_res["f1"])
-        precisions.append(probe_res["precision"])
-        recalls.append(probe_res["recall"])
-        accuracies.append(probe_res["accuracy"])
-
-        # 5. Confidence delta
-        exp_conf = expected.get("confidence", 0.0)
-        act_conf = actual.get("confidence", 0.0)
-        conf_delta = abs(exp_conf - act_conf)
-
-        # Pass criteria: status match, probe match, similarity meets threshold, difference within bound
-        similarity_passed = (
-            sem_sim >= config.llm_min_similarity and diff_pct <= config.llm_max_difference
-        )
-        case_passed = status_match and probe_match and similarity_passed
-
-        if case_passed:
-            passed_cases += 1
-
-        status_tag = "PASS" if case_passed else "FAIL"
-        case_id = case.get("id", case_idx)
-        print(
-            f"  [{case_idx}/{total}] Case: {case_id} "
-            f"[{status_tag}] "
-            f"status={'OK' if status_match else 'MISMATCH'}  "
-            f"probe={'OK' if probe_match else 'MISMATCH'}  "
-            f"sem_sim={sem_sim:.1f}%  diff={diff_pct:.1f}%"
-        )
-        image_path = case.get("image_path")
-        image_exists = Path(image_path).exists() if image_path else None
-
-        case_results.append(
-            {
-                "case_id": case.get("id"),
-                "description": case.get("description", ""),
-                "species_code": case.get("species_code", ""),
-                "image_path": image_path,
-                "image_exists": image_exists,
-                "passed": case_passed,
-                "status_match": status_match,
-                "probe_match": probe_match,
-                "semantic_similarity_pct": sem_sim,
-                "lexical_similarity_pct": lex_sim,
-                "response_difference_pct": diff_pct,
-                "f1_score": probe_res["f1"],
-                "precision": probe_res["precision"],
-                "recall": probe_res["recall"],
-                "accuracy": probe_res["accuracy"],
-                "confidence_delta": round(conf_delta, 4),
-                "similarity_method": sim_res["method"],
-                "expected_assessment": exp_assessment,
-                "actual_assessment": act_assessment,
-            }
-        )
-
-    # 6. Execute Batch Photo Evaluation on images directory
-    batch_dir = photos_dir or IMAGES_DIR
-    batch_photo_summary = evaluate_batch_photos(
-        photos_dir=batch_dir,
-        config=config,
-        manifest_path=manifest_path,
+    predictor = FinalDatasetPredictor(
+        predictions_file=predictions_file,
+        use_mock=is_mock,
     )
 
-    duration = time.perf_counter() - start_time
-    total = len(cases)
+    def on_progress(idx: int, total: int, sample: Any, pred: dict[str, Any]) -> None:
+        p_status = pred.get("predicted_health_status", "unknown")
+        e_status = getattr(sample, "status", "unknown")
+        match_tag = "OK" if p_status == e_status else "MISMATCH"
+        sym_count = len(pred.get("predicted_symptoms", []))
+        print(
+            f"  [{idx}/{total}] {sample.id} [{match_tag}] "
+            f"exp={e_status} pred={p_status} syms={sym_count} ({pred.get('latency_ms', 0):.1f}ms)"
+        )
 
-    mean_sem_sim = round(sum(sem_sims) / len(sem_sims), 2) if sem_sims else 0.0
-    mean_lex_sim = round(sum(lex_sims) / len(lex_sims), 2) if lex_sims else 0.0
-    mean_diff = round(sum(resp_diffs) / len(resp_diffs), 2) if resp_diffs else 0.0
-    probe_accuracy = round((probe_matches / total) * 100.0, 2) if total > 0 else 0.0
-    mean_f1 = round(sum(f1_scores) / len(f1_scores), 2) if f1_scores else 0.0
-    mean_precision = round(sum(precisions) / len(precisions), 2) if precisions else 0.0
-    mean_recall = round(sum(recalls) / len(recalls), 2) if recalls else 0.0
+    predictions = predictor.predict_batch(
+        samples=samples_to_eval,
+        species_meta_map=dataset.species_meta,
+        limit=limit,
+        progress_callback=on_progress,
+    )
+
+    metrics_data = evaluate_final_dataset_metrics(
+        eval_samples=samples_to_eval,
+        predictions=predictions,
+        species_meta=dataset.species_meta,
+    )
+
+    # Print Species Breakdown Table
+    print("\n  --- Per-Species Breakdown ---")
+    print(f"  {'Species':<18} {'Samples':<8} {'Status Acc':<12} {'Status F1':<12} {'Symptoms Micro-F1':<18}")
+    print(f"  {'-'*18} {'-'*8} {'-'*12} {'-'*12} {'-'*18}")
+    for sp_key, sp_data in metrics_data["by_species"].items():
+        s_acc = sp_data["health_status"]["accuracy"]
+        s_f1 = sp_data["health_status"]["f1"]
+        sym_f1 = sp_data["symptoms"]["micro_f1"]
+        print(f"  {sp_key:<18} {sp_data['total_samples']:<8} {s_acc:<12.1f}% {s_f1:<12.1f}% {sym_f1:<18.1f}%")
+
+    duration = time.perf_counter() - start_time
+
+    status_acc = metrics_data["health_status"]["accuracy"]
+    status_f1 = metrics_data["health_status"]["f1"]
+    sym_micro_f1 = metrics_data["symptoms"]["micro_f1"]
+    sym_macro_f1 = metrics_data["symptoms"]["macro_f1"]
 
     metrics: dict[str, MetricResult] = {
-        "mean_semantic_similarity": MetricResult(
-            name="mean_semantic_similarity",
-            value=mean_sem_sim,
-            status="PASS" if mean_sem_sim >= config.llm_min_similarity else "FAIL",
-            threshold=config.llm_min_similarity,
-            reason="Mean semantic similarity between expected and actual VLM assessment responses.",
+        "health_status_accuracy": MetricResult(
+            name="health_status_accuracy",
+            value=status_acc,
+            status="PASS" if status_acc >= 75.0 else "FAIL",
+            threshold=75.0,
+            reason="Overall accuracy in predicting healthy vs unhealthy plants.",
         ),
-        "mean_response_difference": MetricResult(
-            name="mean_response_difference",
-            value=mean_diff,
-            status="PASS" if mean_diff <= config.llm_max_difference else "FAIL",
-            threshold=config.llm_max_difference,
-            reason="Mean difference percentage via (100 - (similarity) * 100).",
+        "health_status_f1": MetricResult(
+            name="health_status_f1",
+            value=status_f1,
+            status="PASS" if status_f1 >= 75.0 else "FAIL",
+            threshold=75.0,
+            reason="Harmonic mean of precision and recall for plant condition assessment.",
         ),
-        "probe_answer_accuracy": MetricResult(
-            name="probe_answer_accuracy",
-            value=probe_accuracy,
-            status="PASS" if probe_accuracy >= 100.0 else "FAIL",
-            threshold=100.0,
-            reason="All VLM probe answers (yes/no) must match expected ground truth.",
+        "symptoms_micro_f1": MetricResult(
+            name="symptoms_micro_f1",
+            value=sym_micro_f1,
+            status="PASS" if sym_micro_f1 >= 60.0 else "FAIL",
+            threshold=60.0,
+            reason="Global Micro-F1 across multi-label botanical symptom detections.",
         ),
-        "structured_f1_score": MetricResult(
-            name="structured_f1_score",
-            value=mean_f1,
-            status="PASS" if mean_f1 >= 80.0 else "FAIL",
-            threshold=80.0,
-            reason="Harmonic mean of precision and recall on structured JSON symptom/probe findings.",
-        ),
-        "structured_precision": MetricResult(
-            name="structured_precision",
-            value=mean_precision,
-            status="PASS" if mean_precision >= 80.0 else "FAIL",
-            threshold=80.0,
-            reason="Proportion of detected symptoms/probes that were true positives.",
-        ),
-        "structured_recall": MetricResult(
-            name="structured_recall",
-            value=mean_recall,
-            status="PASS" if mean_recall >= 80.0 else "FAIL",
-            threshold=80.0,
-            reason="Proportion of expected symptoms/probes successfully detected.",
-        ),
-        "batch_photo_success_rate": MetricResult(
-            name="batch_photo_success_rate",
-            value=batch_photo_summary["success_rate_pct"],
-            status="PASS" if batch_photo_summary["success_rate_pct"] >= 50.0 else "FAIL",
+        "symptoms_macro_f1": MetricResult(
+            name="symptoms_macro_f1",
+            value=sym_macro_f1,
+            status="PASS" if sym_macro_f1 >= 50.0 else "FAIL",
             threshold=50.0,
-            reason=(
-                f"Batch photo criteria pass rate: {batch_photo_summary['successful_photos']}/"
-                f"{batch_photo_summary['total_photos']} photos passed criteria."
-            ),
-        ),
-        "mean_lexical_similarity": MetricResult(
-            name="mean_lexical_similarity",
-            value=mean_lex_sim,
-            status="PASS",
-            threshold=None,
-            reason="Informational: Mean character and word SequenceMatcher alignment.",
+            reason="Unweighted Macro-F1 across all standardized symptom tags.",
         ),
     }
 
+    # Save detailed JSON artifact
+    out_dir = config.reports_dir if hasattr(config, "reports_dir") else Path("evaluation/reports")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_json = Path(results_json_path) if results_json_path else out_dir / "final_evaluation_results.json"
+
+    with open(out_json, "w", encoding="utf-8") as f:
+        json.dump(metrics_data, f, indent=2, ensure_ascii=False)
+    print(f"\n  [vlm] Full detailed metrics written to {out_json}")
+
+    # Build per-case results for vlm.jsonl
+    case_results: list[dict[str, Any]] = []
+    passed_cases = 0
+    for sample, pred in zip(samples_to_eval, predictions):
+        e_st = normalize_health_status(sample.status)
+        a_st = normalize_health_status(pred.get("predicted_health_status"))
+        status_match = e_st == a_st
+        if status_match:
+            passed_cases += 1
+        case_results.append({
+            "case_id": sample.id,
+            "species": sample.species,
+            "passed": status_match,
+            "expected_health_status": sample.status,
+            "actual_health_status": pred.get("predicted_health_status"),
+            "expected_symptoms": list(sample.symptoms),
+            "actual_symptoms": list(pred.get("predicted_symptoms", [])),
+            "latency_ms": pred.get("latency_ms", 0.0),
+            "explanation": pred.get("explanation", ""),
+        })
+
     all_passed = all(m.status in ("PASS", "SKIPPED") for m in metrics.values())
-    status = "PASS" if all_passed and passed_cases == total else "FAIL"
+    status = "PASS" if all_passed else "FAIL"
 
     result = ScopeExecutionResult(
         scope_name="vlm",
         status=status,
         duration_seconds=duration,
-        total_cases=total,
+        total_cases=total_eval,
         passed_cases=passed_cases,
         metrics=metrics,
         case_results=case_results,
         called_endpoints=[
-            {"method": "", "path": "assessment.vlm  (plant symptom analysis)", "calls": total, "source": "in-memory"},
-            {"method": "", "path": "vlm.metrics.evaluate_probe_findings", "calls": total, "source": "in-memory"},
-            {"method": "", "path": "vlm.metrics.evaluate_symptoms_classification", "calls": total, "source": "in-memory"},
-            {"method": "", "path": "evaluation.common.metrics.calculate_text_similarity", "calls": total, "source": "in-memory"},
-            {"method": "", "path": "vlm.run.evaluate_batch_photos  (batch photo engine)", "calls": 1, "source": "in-memory"},
+            {"method": "", "path": "vlm.final_dataset.load_final_dataset", "calls": 1, "source": "in-memory"},
+            {"method": "", "path": "vlm.predictor.FinalDatasetPredictor", "calls": total_eval, "source": "in-memory"},
+            {"method": "", "path": "vlm.metrics.evaluate_final_dataset_metrics", "calls": 1, "source": "in-memory"},
         ],
     )
     print_scope_aggregate(result)
     return result
+
+
+run_final_dataset_evaluation = run_vlm_evaluation
+
+
+

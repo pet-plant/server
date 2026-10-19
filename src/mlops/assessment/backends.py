@@ -149,8 +149,9 @@ def _load_local_vlm(model_path: str) -> tuple[Any, Any]:
         source, trust_remote_code=True, local_files_only=is_local
     )
     use_cuda = torch.cuda.is_available()
+    use_mps = not use_cuda and torch.backends.mps.is_available()
     dtype = torch.bfloat16 if use_cuda and torch.cuda.is_bf16_supported() else (
-        torch.float16 if use_cuda else torch.bfloat16
+        torch.float16 if (use_cuda or use_mps) else torch.bfloat16
     )
     vlm = AutoModelForImageTextToText.from_pretrained(
         source,
@@ -160,6 +161,8 @@ def _load_local_vlm(model_path: str) -> tuple[Any, Any]:
         trust_remote_code=True,
         local_files_only=is_local,
     )
+    if use_mps:
+        vlm = vlm.to("mps")
     return processor, vlm
 
 
@@ -358,8 +361,16 @@ def _mlx_metal_available() -> bool:
         return False
 
 
+def _mps_available() -> bool:
+    try:
+        import torch
+    except ImportError:
+        return False
+    return bool(torch.backends.mps.is_available())
+
+
 def _select_local_backend(model_path: str | Path) -> VLMBackend:
-    """CUDA, then MLX on Apple Silicon, then CPU transformers."""
+    """CUDA, then MLX on Apple Silicon, then MPS (Apple Silicon GPU), then CPU transformers."""
     hf_path = _resolve_model_path(model_path)
     if _cuda_available():
         logger.info("local VLM runtime: cuda (%s)", hf_path)
@@ -369,7 +380,10 @@ def _select_local_backend(model_path: str | Path) -> VLMBackend:
         logger.info("local VLM runtime: mlx (%s)", mlx_path)
         return LocalMLXBackend(mlx_path, hf_path)
     if _mlx_metal_available():
-        logger.info("local VLM runtime: cpu; MLX weights not found at %s", mlx_path)
+        runtime_name = "mps" if _mps_available() else "cpu"
+        logger.info("local VLM runtime: %s; MLX weights not found at %s", runtime_name, mlx_path)
+    elif _mps_available():
+        logger.info("local VLM runtime: mps (Apple Silicon GPU) (%s)", hf_path)
     else:
         logger.info("local VLM runtime: cpu (%s)", hf_path)
     return LocalTransformersBackend(hf_path)

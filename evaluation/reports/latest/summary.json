@@ -1,9 +1,9 @@
 {
-  "run_id": "run_20261017_165533_fe59e7",
-  "timestamp_utc": "2026-10-17T16:55:36.684561+00:00",
-  "duration_seconds": 2.873,
-  "overall_status": "PASS",
-  "git_commit": "e630077",
+  "run_id": "run_20261018_085332_a032c5",
+  "timestamp_utc": "2026-10-18T10:16:46.545148+00:00",
+  "duration_seconds": 4993.707,
+  "overall_status": "FAIL",
+  "git_commit": "e472fae",
   "python_version": "3.13.7",
   "models_used": {
     "vlm_model": "models/internvl3_5-2b (local)",
@@ -14,105 +14,61 @@
   "scopes": {
     "vlm": {
       "scope_name": "vlm",
-      "status": "PASS",
-      "duration_seconds": 1.47,
-      "total_cases": 33,
-      "passed_cases": 33,
+      "status": "FAIL",
+      "duration_seconds": 4985.875,
+      "total_cases": 505,
+      "passed_cases": 258,
       "metrics": {
-        "mean_semantic_similarity": {
-          "name": "mean_semantic_similarity",
-          "value": 97.16,
-          "formatted_value": "97.16%",
-          "status": "PASS",
-          "threshold": 70.0,
-          "reason": "Mean semantic similarity between expected and actual VLM assessment responses."
+        "health_status_accuracy": {
+          "name": "health_status_accuracy",
+          "value": 51.09,
+          "formatted_value": "51.09%",
+          "status": "FAIL",
+          "threshold": 75.0,
+          "reason": "Overall accuracy in predicting healthy vs unhealthy plants."
         },
-        "mean_response_difference": {
-          "name": "mean_response_difference",
-          "value": 2.84,
-          "formatted_value": "2.84%",
-          "status": "PASS",
-          "threshold": 30.0,
-          "reason": "Mean difference percentage via (100 - (similarity) * 100)."
+        "health_status_f1": {
+          "name": "health_status_f1",
+          "value": 67.28,
+          "formatted_value": "67.28%",
+          "status": "FAIL",
+          "threshold": 75.0,
+          "reason": "Harmonic mean of precision and recall for plant condition assessment."
         },
-        "probe_answer_accuracy": {
-          "name": "probe_answer_accuracy",
-          "value": 100.0,
-          "formatted_value": "100.00%",
-          "status": "PASS",
-          "threshold": 100.0,
-          "reason": "All VLM probe answers (yes/no) must match expected ground truth."
+        "symptoms_micro_f1": {
+          "name": "symptoms_micro_f1",
+          "value": 20.05,
+          "formatted_value": "20.05%",
+          "status": "FAIL",
+          "threshold": 60.0,
+          "reason": "Global Micro-F1 across multi-label botanical symptom detections."
         },
-        "structured_f1_score": {
-          "name": "structured_f1_score",
-          "value": 100.0,
-          "formatted_value": "100.00%",
-          "status": "PASS",
-          "threshold": 80.0,
-          "reason": "Harmonic mean of precision and recall on structured JSON symptom/probe findings."
-        },
-        "structured_precision": {
-          "name": "structured_precision",
-          "value": 100.0,
-          "formatted_value": "100.00",
-          "status": "PASS",
-          "threshold": 80.0,
-          "reason": "Proportion of detected symptoms/probes that were true positives."
-        },
-        "structured_recall": {
-          "name": "structured_recall",
-          "value": 100.0,
-          "formatted_value": "100.00",
-          "status": "PASS",
-          "threshold": 80.0,
-          "reason": "Proportion of expected symptoms/probes successfully detected."
-        },
-        "batch_photo_success_rate": {
-          "name": "batch_photo_success_rate",
-          "value": 100.0,
-          "formatted_value": "100.00%",
-          "status": "PASS",
+        "symptoms_macro_f1": {
+          "name": "symptoms_macro_f1",
+          "value": 10.86,
+          "formatted_value": "10.86%",
+          "status": "FAIL",
           "threshold": 50.0,
-          "reason": "Batch photo criteria pass rate: 29/29 photos passed criteria."
-        },
-        "mean_lexical_similarity": {
-          "name": "mean_lexical_similarity",
-          "value": 82.6,
-          "formatted_value": "82.60%",
-          "status": "PASS",
-          "threshold": null,
-          "reason": "Informational: Mean character and word SequenceMatcher alignment."
+          "reason": "Unweighted Macro-F1 across all standardized symptom tags."
         }
       },
       "skip_reason": null,
       "called_endpoints": [
         {
           "method": "",
-          "path": "assessment.vlm  (plant symptom analysis)",
-          "calls": 33,
+          "path": "vlm.final_dataset.load_final_dataset",
+          "calls": 1,
           "source": "in-memory"
         },
         {
           "method": "",
-          "path": "vlm.metrics.evaluate_probe_findings",
-          "calls": 33,
+          "path": "vlm.predictor.FinalDatasetPredictor",
+          "calls": 505,
           "source": "in-memory"
         },
         {
           "method": "",
-          "path": "vlm.metrics.evaluate_symptoms_classification",
-          "calls": 33,
-          "source": "in-memory"
-        },
-        {
-          "method": "",
-          "path": "evaluation.common.metrics.calculate_text_similarity",
-          "calls": 33,
-          "source": "in-memory"
-        },
-        {
-          "method": "",
-          "path": "vlm.run.evaluate_batch_photos  (batch photo engine)",
+          "path": "vlm.metrics.evaluate_final_dataset_metrics",
           "calls": 1,
           "source": "in-memory"
         }
@@ -121,7 +77,7 @@
     "llm": {
       "scope_name": "llm",
       "status": "PASS",
-      "duration_seconds": 0.113,
+      "duration_seconds": 0.929,
       "total_cases": 5,
       "passed_cases": 5,
       "metrics": {
@@ -191,7 +147,7 @@
     "end_to_end": {
       "scope_name": "end_to_end",
       "status": "PASS",
-      "duration_seconds": 1.288,
+      "duration_seconds": 6.853,
       "total_cases": 6,
       "passed_cases": 6,
       "metrics": {
@@ -213,8 +169,8 @@
         },
         "median_pipeline_latency_ms": {
           "name": "median_pipeline_latency_ms",
-          "value": 36.39,
-          "formatted_value": "36.39ms",
+          "value": 914.5,
+          "formatted_value": "914.50ms",
           "status": "PASS",
           "threshold": 2500.0,
           "reason": "Median pipeline run latency."

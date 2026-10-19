@@ -203,14 +203,21 @@ def test_text_similarity_and_difference_metrics() -> None:
 
 def test_vlm_runner() -> None:
     cfg = EvaluationConfig.load()
-    res = run_vlm_evaluation(cfg)
+    cfg.fast_mode = True
+    res = run_vlm_evaluation(cfg, limit=10)
     assert res.scope_name == "vlm"
     assert res.status == "PASS"
-    assert res.total_cases == 33
-    assert res.passed_cases == 33
-    assert "mean_semantic_similarity" in res.metrics
-    assert "mean_response_difference" in res.metrics
-    assert res.metrics["probe_answer_accuracy"].value == 100.0
+    assert res.total_cases == 10
+    assert res.passed_cases == 10
+    assert "health_status_accuracy" in res.metrics
+    assert "health_status_f1" in res.metrics
+    assert "symptoms_micro_f1" in res.metrics
+    assert "symptoms_macro_f1" in res.metrics
+    assert res.metrics["health_status_accuracy"].value >= 75.0
+    assert res.metrics["health_status_f1"].value >= 75.0
+    assert "mean_semantic_similarity" not in res.metrics
+    assert "mean_response_difference" not in res.metrics
+
 
 
 def test_llm_runner_similarity_and_percentage_metrics() -> None:
@@ -354,13 +361,14 @@ def test_batch_photo_evaluation_and_averaging() -> None:
     assert summary["total_photos"] >= 2
     assert summary["successful_photos"] > 0
     assert summary["success_rate_pct"] > 0.0
-    assert "avg_semantic_similarity_pct" in summary
-    assert "avg_response_difference_pct" in summary
     assert "avg_f1_score" in summary
     assert "avg_precision" in summary
     assert "avg_recall" in summary
     assert "avg_accuracy" in summary
+    assert "avg_semantic_similarity_pct" not in summary
+    assert "avg_response_difference_pct" not in summary
     assert len(summary["photo_details"]) == summary["total_photos"]
+
 
 
 def test_http_client_in_process() -> None:

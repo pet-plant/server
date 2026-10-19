@@ -375,11 +375,79 @@ def execute_single_scenario(scenario_name: str, config: EvaluationConfig) -> dic
             }
 
             fe_valid = validate_frontend_envelope(fe_envelope, fe_dict)
+
+            # ── Per-stage input / output snapshot ───────────────────────────
+            stage_trace: list[dict[str, Any]] = [
+                {
+                    "stage": "capture",
+                    "input": {
+                        "plant_id": str(plant_id),
+                        "run_id": str(run_id),
+                        "image_refs": raw_images,
+                    },
+                    "output": {
+                        "quality_passed": True,
+                        "quality_reason": None,
+                    },
+                },
+                {
+                    "stage": "assess",
+                    "input": {
+                        "health_status": raw_status,
+                        "confidence": raw_conf,
+                        "observations": raw_symptoms,
+                        "consensus": raw_consensus,
+                    },
+                    "output": {
+                        "health_status": obs.health_status,
+                        "confidence": obs.confidence,
+                        "observations_count": len(obs.observations_json or []),
+                    },
+                },
+                {
+                    "stage": "rules",
+                    "input": {
+                        "health_status": raw_status,
+                        "observations_count": len(raw_symptoms),
+                    },
+                    "output": {
+                        "decision": decision_str,
+                        "primary_symptom": tr.primary_symptom if tr else None,
+                        "confidence": tr.confidence if tr else None,
+                        "reasoning": tr.reasoning if tr else None,
+                    },
+                },
+                {
+                    "stage": "advice",
+                    "input": {
+                        "decision": decision_str,
+                        "care_advice_requested": decision_str == "CARE_ADVICE_REQUIRED",
+                    },
+                    "output": {
+                        "care_plan_generated": cp is not None,
+                        "status_label": cp.status_label if cp else None,
+                        "assessment": cp.assessment if cp else None,
+                        "actions": actions,
+                    },
+                },
+                {
+                    "stage": "companion",
+                    "input": {
+                        "decision": decision_str,
+                        "health_status": raw_status,
+                    },
+                    "output": {
+                        "message": comp_msg_str,
+                    },
+                },
+            ]
+
             step_details.append(
                 {
                     "day": idx,
                     "decision": decision_str,
                     "fe_valid": fe_valid,
+                    "stage_trace": stage_trace,
                 }
             )
 
@@ -394,6 +462,7 @@ def execute_single_scenario(scenario_name: str, config: EvaluationConfig) -> dic
         "expected_decisions": expected_decisions,
         "steps": step_details,
     }
+
 
 
 # The live worker wakes every ``poll_seconds`` (30). A 10s poll expires while the
@@ -761,6 +830,16 @@ def run_end_to_end_evaluation(
                     fe_valid = step.get("fe_valid", False)
                     fe_tag = "OK" if fe_valid else "FAIL"
                     print(f"       Day {day}: decision={decision}  FE-envelope={fe_tag}")
+                    # Print per-stage trace
+                    for stage in step.get("stage_trace", []):
+                        sname = stage.get("stage", "?").upper()
+                        inp = stage.get("input", {})
+                        out = stage.get("output", {})
+                        inp_str = "  ".join(f"{k}={v}" for k, v in inp.items())
+                        out_str = "  ".join(f"{k}={v}" for k, v in out.items())
+                        print(f"         [{sname}] in:  {inp_str}")
+                        print(f"         [{sname}] out: {out_str}")
+
 
                 if actual != expected:
                     print(f"       Expected decisions: {expected}")

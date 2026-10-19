@@ -7,14 +7,14 @@ All scenario definitions, golden ground truths, botanical criteria, test plant p
 
 ## Table of Contents
 
-1. [Overview &amp; Evaluation Scopes](#1-overview--evaluation-scopes)
+1. [Overview & Evaluation Scopes](#1-overview--evaluation-scopes)
 2. [Quick Start](#2-quick-start)
-3. [Batch Photo Evaluation Engine](#3-batch-photo-evaluation-engine)
-4. [Data Ingestion &amp; Pasting Guide](#4-data-ingestion--pasting-guide)
+3. [VLM Final Dataset Evaluation Engine](#3-vlm-final-dataset-evaluation-engine)
+4. [Data Ingestion & Pasting Guide](#4-data-ingestion--pasting-guide)
 5. [Live HTTP vs. In-Memory Execution](#5-live-http-vs-in-memory-execution)
-6. [Database Fixture Lifecycle (`setup-fixtures` &amp; `cleanup-fixtures`)](#6-database-fixture-lifecycle)
+6. [Database Fixture Lifecycle (`setup-fixtures` & `cleanup-fixtures`, `--cleanup`)](#6-database-fixture-lifecycle)
 7. [Bruno API Collection (`bruno/`)](#7-bruno-api-collection)
-8. [Active Model Lineage Tracking](#8-active-model-lineage-tracking)
+8. [Active Model Lineage Tracking & Metrics](#8-active-model-lineage-tracking--metrics)
 9. [Automated Test Suite](#9-automated-test-suite)
 10. [Directory Structure](#10-directory-structure)
 
@@ -24,34 +24,39 @@ All scenario definitions, golden ground truths, botanical criteria, test plant p
 
 The evaluation harness validates accuracy, schema conformance, quantitative text similarity/difference, and end-to-end multi-day lifecycle behavior across 3 scopes:
 
-| Scope          | Target Component      | What It Validates                                                                                                                    | Key Datasets                                          |
-| -------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `vlm`        | Visual Language Model | Diagnostic assessment accuracy, structured symptoms, probe questions, text similarity & difference %, batch photo pass rate          | `datasets/vlm/scenarios.json`, `datasets/images/` |
-| `llm`        | Care Advice (LLM)     | 3NF care plan schema conformance, action grounding in fired probes, action alignment %, text similarity & difference %               | `datasets/llm/advice_cases.json`                    |
-| `end_to_end` | Complete System       | Multi-day pipeline lifecycle: photo upload via `/capture` → assessment → rules → advice → companion state envelope conformance | `datasets/end_to_end/scenarios.json`                |
+| Scope          | Target Component      | What It Validates                                                                                                                              | Key Datasets                                          |
+| -------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `vlm`          | Visual Language Model | Diagnostic condition assessment (`healthy`/`unhealthy`), multi-label symptom classification, binary confusion matrix, per-species breakdown   | `datasets/final/eval.jsonl`, `datasets/final/species.json`, `datasets/final/images/` |
+| `llm`          | Care Advice (LLM)     | 3NF care plan schema conformance, action grounding in fired probes, action alignment %, text similarity & difference %                         | `datasets/llm/advice_cases.json`                      |
+| `end_to_end`   | Complete System       | Multi-day pipeline lifecycle: photo upload via `/capture` → assessment → rules → advice → companion state envelope conformance           | `datasets/end_to_end/scenarios.json`                  |
 
 ---
 
 ## 2. Quick Start
 
-Run the evaluation commands using `uv run python -m evaluation.scripts.cli`:
+Run evaluation commands using `uv run python -m evaluation.scripts.cli`:
 
 ```bash
 # Run all scopes (fast mode for smoke testing)
 uv run python -m evaluation.scripts.cli run --fast
 
-# Run the complete test suite across all multi-day scenarios
+# Run the complete test suite (includes 505-sample final VLM dataset, LLM advice, and E2E multi-day scenarios)
 uv run python -m evaluation.scripts.cli run
+
+# Run with automated post-run database fixture cleanup
+uv run python -m evaluation.scripts.cli run --cleanup
 
 # Run a specific scope only
 uv run python -m evaluation.scripts.cli run --scope vlm
 uv run python -m evaluation.scripts.cli run --scope llm
 uv run python -m evaluation.scripts.cli run --scope end_to_end
 
-# Run with automated post-run database cleanup
-uv run python -m evaluation.scripts.cli run --cleanup
+# Standalone final dataset VLM evaluation
+uv run python -m evaluation.scripts.cli evaluate-final --limit 10
+uv run python -m evaluation.scripts.cli evaluate-final --use-mock
+uv run python -m evaluation.scripts.cli evaluate-final --predictions-file evaluation/reports/final_predictions.jsonl
 
-# Validate all manifest schemas without executing model calls
+# Validate all manifest schemas and final dataset files without executing model calls
 uv run python -m evaluation.scripts.cli validate
 
 # Clean older evaluation reports
@@ -60,75 +65,63 @@ uv run python -m evaluation.scripts.cli clean --yes
 
 ---
 
-## 3. Batch Photo Evaluation Engine
+## 3. VLM Final Dataset Evaluation Engine
 
-The evaluation suite includes a **Batch Photo Criteria Engine** designed for testing multiple plant photos simultaneously:
+The VLM evaluation scope evaluates the model on a benchmark of **505 human-reviewed images across 10 indoor plant species** located in `evaluation/datasets/final/`.
 
-- Discovers all photos in a directory.
-- Evaluates each photo against health criteria, symptom detection, and probe questions.
-- Tracks individual **pass / fail** counts.
-- Computes **aggregate averages across all photos** (Average Similarity %, Average Difference %, Average $F_1$, Precision, Recall, Accuracy).
+### Dataset Structure
 
-### How to Run Batch Photo Evaluation
-
-```bash
-# 1. Run against the default images directory (evaluation/datasets/images/)
-uv run python -m evaluation.scripts.cli evaluate-photos
-
-# 2. Run against your own custom folder of photos
-uv run python -m evaluation.scripts.cli evaluate-photos --images-dir /path/to/your/photos
-
-# 3. Run with a specific ground-truth criteria manifest
-uv run python -m evaluation.scripts.cli evaluate-photos --manifest evaluation/datasets/vlm/scenarios.json
+```text
+evaluation/datasets/final/
+├── eval.jsonl       # 505 ground-truth records (image_path, species_code, health_status, symptoms)
+├── species.json     # 10 species metadata profiles with allowed symptoms
+└── images/          # JPG images organized by species and health status
 ```
 
-### Adding New Photos for Future Testing
+Each sample in `eval.jsonl` contains:
+```json
+{
+  "id": "monstera_deliciosa_unhealthy_0042",
+  "image_path": "images/monstera_deliciosa/unhealthy_0042.jpg",
+  "species_code": "monstera_deliciosa",
+  "ground_truth": {
+    "health_status": "unhealthy",
+    "symptoms": ["leaf_yellowing", "brown_leaf_tips"]
+  }
+}
+```
 
-1. **Drop Images:** Place any `.jpg`, `.jpeg`, `.png`, or `.webp` files into:
+### What Is Evaluated
 
-   ```text
-   evaluation/datasets/images/
-   ```
-2. **(Optional) Add Specific Criteria:** If you want custom ground-truth symptoms or probe answers for your new photos, add a case entry into:
+1. **Binary Condition Classification (`health_status`):**
+   - Classes: `healthy` vs `unhealthy`
+   - Metrics: **Accuracy**, **Precision**, **Recall**, **$F_1$ Score**
+   - Complete Confusion Matrix: True Positives (TP), True Negatives (TN), False Positives (FP), False Negatives (FN)
 
-   ```text
-   evaluation/datasets/vlm/scenarios.json
-   ```
+2. **Multi-Label Symptom Classification (`symptoms`):**
+   - Symptoms: `leaf_yellowing`, `wilting`, `brown_leaf_tips`, `leaf_spots`, etc.
+   - Metrics: **Micro $F_1$**, **Macro $F_1$**, Micro Precision/Recall, Macro Precision/Recall
+   - Per-symptom breakdown with support counts and per-species accuracy slicing
 
-   Reference the template provided in `evaluation/datasets/vlm/manifest_template.json`:
+3. **Incremental Prediction Caching:**
+   - Predictions are checkpointed to `evaluation/reports/final_predictions.jsonl`.
+   - If interrupted, re-running `--predictions-file evaluation/reports/final_predictions.jsonl` resumes without re-inferencing already completed images.
 
-   ```json
-   {
-     "id": "VLM-CUSTOM-001",
-     "species_code": "monstera_deliciosa",
-     "image_path": "evaluation/datasets/images/my_plant.jpg",
-     "description": "Monstera with lower leaf yellowing",
-     "expected_response": {
-       "health_status": "possibly_unhealthy",
-       "assessment": "Lower leaves show yellowing consistent with overwatering.",
-       "probe_answer": "yes"
-     }
-   }
-   ```
-3. **Inspect Output:** Run `uv run python -m evaluation.scripts.cli evaluate-photos`. You will receive a summary table:
+### How to Run VLM Evaluation
 
-   ```text
-   =================================================================
-   BATCH PHOTO CRITERIA EVALUATION REPORT
-   =================================================================
-   Total Photos Evaluated: 7
-   Successful Photos:      7  (100.0% pass rate)
-   Failed Photos:          0
-   -----------------------------------------------------------------
-   AVERAGE METRIC RESULTS ACROSS ALL PHOTOS:
-     - Average Semantic Similarity:  95.11%
-     - Average Response Difference:  4.89%
-     - Average Structured F1 Score:  100.00%
-     - Average Precision:            100.00%
-     - Average Recall:               100.00%
-     - Average Accuracy:             100.00%
-   =================================================================
-   ```
+```bash
+# 1. Official VLM scope run (via full suite)
+uv run python -m evaluation.scripts.cli run --scope vlm
+
+# 2. Fast smoke test (first 5 samples using mock predictor)
+uv run python -m evaluation.scripts.cli run --scope vlm --fast
+
+# 3. Direct evaluation with a sample limit (e.g., 20 images)
+uv run python -m evaluation.scripts.cli evaluate-final --limit 20
+
+# 4. Instant re-scoring from an existing predictions file
+uv run python -m evaluation.scripts.cli evaluate-final --predictions-file evaluation/reports/final_predictions.jsonl
+```
 
 ---
 
@@ -140,68 +133,29 @@ This section is your reference guide for **where to paste real data and photos**
 
 | Data Type                         | Target Destination File / Directory                  | What You Put There                                                              |
 | --------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Plant Photos**            | `evaluation/datasets/images/`                      | Raw `.jpg`, `.jpeg`, `.png`, or `.webp` files from your phone or camera |
-| **VLM Ground Truth**        | `evaluation/datasets/vlm/scenarios.json`           | Botanical probe questions, expected diagnoses, and ground-truth symptoms        |
-| **LLM Care Advice**         | `evaluation/datasets/llm/advice_cases.json`        | Plant species, observed symptoms, and expected 3NF care plan actions            |
-| **Botanical Knowledge**     | `sample/knowldge/<species_name>.md`                | Care instructions, watering intervals, light levels, and probe guidelines       |
-| **Multi-Day E2E Scenarios** | `evaluation/datasets/end_to_end/scenarios/`        | Progressive daily observations over multi-day plant lifecycles                  |
-| **E2E Golden Outputs**      | `evaluation/datasets/end_to_end/expected_outputs/` | Golden decisions (`NO_ACTION`, `CARE_ADVICE_REQUIRED`) per day              |
+| **Final VLM Dataset**             | `evaluation/datasets/final/`                         | 505 human-reviewed leaf images, `eval.jsonl`, and `species.json`                |
+| **LLM Care Advice Cases**         | `evaluation/datasets/llm/advice_cases.json`          | Plant species, observed symptoms, and expected 3NF care plan actions            |
+| **Botanical Knowledge Profiles**   | `sample/knowldge/<species_name>.md`                  | Care instructions, watering intervals, light levels, and visual symptom guides  |
+| **Multi-Day E2E Scenarios**       | `evaluation/datasets/end_to_end/scenarios/`          | Progressive daily observations over multi-day plant lifecycles                  |
+| **E2E Golden Outputs**            | `evaluation/datasets/end_to_end/expected_outputs/`   | Golden decisions (`NO_ACTION`, `CARE_ADVICE_REQUIRED`) per day                  |
 
 ---
 
-### A. How to Paste Photos
+### A. How to Add Images to the Final VLM Dataset
 
-1. Copy your plant image files directly into:
+1. Place image files into the species subfolder:
    ```text
-   evaluation/datasets/images/
+   evaluation/datasets/final/images/<species_code>/<image_name>.jpg
    ```
-2. **Recommended File Naming:** Use `<species>_<condition>.jpg`, for example:
-   - `monstera_overwatered.jpg`
-   - `pothos_sun_scorch.jpg`
-   - `peace_lily_healthy.jpg`
-   - `fiddle_leaf_fig_browning.jpg`
-3. Supported image formats: `.jpg`, `.jpeg`, `.png`, `.webp`.
-4. No image preprocessing is needed — the evaluation engine inspects resolution, blur, and brightness automatically.
+2. Append the ground-truth line to `evaluation/datasets/final/eval.jsonl`:
+   ```json
+   {"id": "monstera_deliciosa_unhealthy_0043", "image_path": "images/monstera_deliciosa/unhealthy_0043.jpg", "species_code": "monstera_deliciosa", "ground_truth": {"health_status": "unhealthy", "symptoms": ["leaf_yellowing"]}}
+   ```
+3. Run `uv run python -m evaluation.scripts.cli validate` to verify image paths and species codes.
 
 ---
 
-### B. How to Paste VLM Assessment Ground Truth
-
-Open [`evaluation/datasets/vlm/scenarios.json`](datasets/vlm/scenarios.json) and paste a new test case object into the `"cases"` array:
-
-```json
-{
-  "id": "VLM-CASE-006",
-  "species_code": "monstera_deliciosa",
-  "image_path": "evaluation/datasets/images/monstera_overwatered.jpg",
-  "description": "Monstera with lower leaf yellowing from overwatering",
-  "probe_context": {
-    "slug": "overwatering.widespread_yellowing_of",
-    "care_need": "overwatering",
-    "question": "Does the Monstera show signs of widespread yellowing of lower leaves?",
-    "worse_looks_like": "Multiple older lower leaves nearest the soil turn bright solid yellow.",
-    "better_looks_like": "Lower leaves maintain the exact same deep green color as the upper canopy."
-  },
-  "expected_response": {
-    "health_status": "possibly_unhealthy",
-    "assessment": "Multiple lower leaves exhibit solid yellow discoloration simultaneously, characteristic of prolonged soil moisture. Pattern is consistent with overwatering stress affecting the oldest foliage first.",
-    "probe_answer": "yes",
-    "confidence": 0.88
-  },
-  "actual_response": {
-    "health_status": "possibly_unhealthy",
-    "assessment": "Lower leaves near the soil line show uniform yellowing, suggesting the root zone has been consistently wet.",
-    "probe_answer": "yes",
-    "confidence": 0.85
-  }
-}
-```
-
-> **Tip:** If testing a live model, leave `actual_response` empty or omitted — the runner will populate it with the live model's verdict!
-
----
-
-### C. How to Paste LLM Care Advice Data
+### B. How to Paste LLM Care Advice Data
 
 Open [`evaluation/datasets/llm/advice_cases.json`](datasets/llm/advice_cases.json) and paste a new case into the `"cases"` array:
 
@@ -243,7 +197,7 @@ Open [`evaluation/datasets/llm/advice_cases.json`](datasets/llm/advice_cases.jso
 
 ---
 
-### D. How to Paste Botanical Species Knowledge
+### C. How to Paste Botanical Species Knowledge
 
 If you want to support a new plant species, create a Markdown file in:
 
@@ -272,16 +226,16 @@ Run `uv run python -m evaluation.scripts.cli validate` to verify the botanical k
 
 ---
 
-### E. How to Verify Your Pasted Data
+### D. How to Verify Your Pasted Data
 
-After pasting your photos or JSON cases, run these two commands to confirm everything is valid and working:
+After updating datasets, run:
 
 ```bash
-# 1. Schema check (makes sure your JSON syntax and mandatory keys are 100% correct)
+# 1. Schema check (makes sure all JSON syntax, image paths, and keys are 100% correct)
 uv run python -m evaluation.scripts.cli validate
 
-# 2. Batch photo test (evaluates all images and prints pass/fail rate + averages)
-uv run python -m evaluation.scripts.cli evaluate-photos
+# 2. Fast evaluation run across all scopes
+uv run python -m evaluation.scripts.cli run --fast
 ```
 
 ---
@@ -328,13 +282,15 @@ Deletes all test records, captures, care plans, observations, and devices in str
 uv run python -m evaluation.scripts.cli cleanup-fixtures
 ```
 
-### Post-Run Auto Cleanup
+### Post-Run Auto Cleanup (`--cleanup`)
 
 Append `--cleanup` to any evaluation run to automatically tear down test fixtures after execution:
 
 ```bash
 uv run python -m evaluation.scripts.cli run --cleanup
 ```
+
+When `--cleanup` is specified, the CLI invokes `cleanup_fixtures()` immediately following report generation, ensuring the database is left clean even after full integration runs.
 
 ---
 
@@ -364,44 +320,57 @@ The repository includes a Git-versioned **Bruno collection** in `bruno/`.
 
 ---
 
-## 8. Active Model Lineage Tracking
+## 8. Active Model Lineage Tracking & Metrics
 
 All evaluation runs record the active AI models in use. Reports generated in `evaluation/reports/latest/summary.md` and `summary.json` prominently feature the **Active Models & Environment** table:
 
 | Role                      | Model / Setting                              |
 | ------------------------- | -------------------------------------------- |
-| **VLM Model**       | `gemini-2.5-flash (evaluated / simulated)` |
-| **LLM Model**       | `gpt-4o-mini`                              |
-| **Embedding Model** | `nomic-embed-text`                         |
-| **Execution Mode**  | `in_memory` / `http`                     |
+| **VLM Model**             | `internvl3_5-2b` (local/evaluated)           |
+| **LLM Model**             | `gpt-4o-mini` / `llama3.2`                   |
+| **Embedding Model**       | `nomic-embed-text`                           |
+| **Execution Mode**        | `in_memory` / `http`                         |
 
 ### Metrics & Formula Definitions
 
-- **Semantic Similarity (%)**: Cosine similarity via Ollama `nomic-embed-text` embeddings (fallback: token vector cosine).
-- **Response Difference (%)**: `(100 - (similarity) × 100)` where similarity ∈ [0.0, 1.0].
-- **Structured JSON $F_1$ Score**: Harmonic mean of Precision and Recall on symptoms and probe questions:
+- **Health Status Accuracy (%)**:
+  $$
+  \text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+  $$
+- **Health Status $F_1$ Score**:
   $$
   F_1 = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
   $$
+- **Symptoms Micro $F_1$ Score**:
+  Global aggregation of true positive, false positive, and false negative symptom detections across all 505 images.
+- **Symptoms Macro $F_1$ Score**:
+  Unweighted arithmetic mean of individual $F_1$ scores for each distinct symptom class (giving equal weight to rare symptoms).
+- **Semantic Similarity (%)**:
+  Cosine similarity via Ollama `nomic-embed-text` embeddings (fallback: token vector cosine).
+- **Response Difference (%)**:
+  $(100 - (\text{similarity}) \times 100)$ where $\text{similarity} \in [0.0, 1.0]$.
+- **FE Envelope Compliance Rate**:
+  Fraction of responses meeting the frontend companion state schema specifications ($100\%$ required).
 
 ---
 
 ## 9. Automated Test Suite
 
-Unit and integration tests for the evaluation harness are stored in `tests/test_evaluation_suite.py`:
+Unit and integration tests for the evaluation harness and the final dataset pipeline:
 
 ```bash
-uv run pytest tests/test_evaluation_suite.py
+# Run all evaluation tests (33 tests)
+uv run pytest tests/test_evaluation_suite.py tests/test_final_evaluation.py
 ```
 
 This verifies:
-
-- Manifest schema validation
+- Validation of the 505-sample final dataset manifest (`eval.jsonl` and `species.json`)
+- VLM prompt construction and structured prediction parsing
+- Incremental prediction caching and resuming from disk
+- Binary condition metrics, confusion matrices, and multi-label symptom metrics
 - Quantitative similarity and difference mathematics
-- VLM structured classification metrics ($F_1$, Precision, Recall, Accuracy)
-- Batch photo evaluation engine and averaging calculations
 - In-process HTTP client and FastAPI auth barriers
-- Database fixture seeding and cascading teardown
+- Database fixture seeding and cascading teardown (`--cleanup`)
 
 ---
 
@@ -422,20 +391,24 @@ evaluation/
 ├── config/
 │   └── default.json                   # Configuration parameters & SLA thresholds
 ├── datasets/
-│   ├── images/                        # Test plant photos (monstera, peace lily, etc.)
-│   ├── vlm/                           # VLM scenarios & manifest templates
+│   ├── final/                         # 505 human-reviewed images across 10 species
+│   │   ├── eval.jsonl                 # Ground truth records
+│   │   ├── species.json               # 10 plant species metadata profiles
+│   │   └── images/                    # Leaf images organized by species/condition
 │   ├── llm/                           # LLM care advice test cases
 │   └── end_to_end/                    # Multi-day lifecycle scenario definitions
 ├── vlm/
-│   ├── run.py                         # VLM runner & batch photo evaluator
-│   └── metrics.py                     # Precision, Recall, F1, Accuracy calculator
+│   ├── run.py                         # Official VLM runner (evaluates final dataset)
+│   ├── final_dataset.py               # Dataset loader & manifest validator
+│   ├── predictor.py                   # VLM prompt builder, parser, & disk checkpointing
+│   └── metrics.py                     # Health status & multi-label symptom metrics
 ├── llm/
 │   └── run.py                         # LLM care advice runner
 ├── end_to_end/
 │   ├── run.py                         # End-to-end multi-day scenario runner
 │   └── metrics.py                     # SLA latency and envelope compliance
 ├── scripts/
-│   ├── cli.py                         # Unified evaluation CLI
+│   ├── cli.py                         # Unified evaluation CLI (run, evaluate-final, etc.)
 │   └── cleanup.py                     # Safe report directory cleaner
 └── reports/
     └── latest/                        # Symlink / mirror of most recent report

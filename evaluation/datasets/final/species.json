@@ -1,0 +1,217 @@
+{
+  "species": {
+    "peace_lily": {
+      "name": "Peace lily (Spathiphyllum)",
+      "knowledge": "Peace lilies prefer consistently moist (not soggy) soil, bright indirect light, and moderate to high humidity.\n- Dramatic drooping of the whole plant usually means the soil has dried out; the plant typically recovers within hours of watering.\n- Drooping while the soil is wet, often with yellowing leaves or soft, dark stems at the base, suggests overwatering and root rot.\n- Yellowing of lower, older leaves is commonly caused by overwatering or poor drainage. A single old leaf yellowing occasionally is normal aging.\n- Brown leaf tips are commonly caused by low humidity, inconsistent watering, or salts/chlorine/fluoride in tap water or excess fertilizer.\n- Bleached or scorched patches indicate too much direct sun. Pale leaves can indicate excessive light or nutrient deficiency.\n- White flower spathes turning green or brown as they age is normal.\n- Common pests: spider mites, mealybugs, scale.",
+      "symptoms": [
+        "drooping",
+        "leaf_yellowing",
+        "brown_tips",
+        "brown_edges",
+        "leaf_spots",
+        "scorch",
+        "pale_leaves",
+        "mushy_rot",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "money_tree": {
+      "name": "Money tree (Pachira aquatica)",
+      "knowledge": "Money trees prefer bright indirect light and watering when the top few centimeters of soil are dry. They are sensitive to overwatering.\n- Yellowing leaves are most commonly caused by overwatering; low light can also cause yellowing.\n- Sudden leaf drop is often a reaction to environmental change (moving the plant, drafts, temperature swings), or to over- or underwatering.\n- Brown, crispy leaf edges or tips usually indicate underwatering or low humidity.\n- Curling leaves can indicate underwatering, low humidity, or too much direct sun.\n- A soft, mushy trunk, especially near the soil line, indicates rot from overwatering and is serious.\n- Bleached or scorched patches indicate sunburn from direct sun.\n- Stretched, sparse growth leaning toward a window indicates insufficient light.\n- Braided trunks are normal; an individual trunk in a braid may die while the others stay healthy.\n- Common pests: spider mites, mealybugs, scale, aphids.",
+      "symptoms": [
+        "leaf_yellowing",
+        "leaf_drop",
+        "brown_edges",
+        "brown_tips",
+        "leaf_curling",
+        "drooping",
+        "mushy_rot",
+        "scorch",
+        "leggy_growth",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "pothos": {
+      "name": "Pothos (Epipremnum aureum)",
+      "knowledge": "Pothos tolerate a range of conditions but prefer bright indirect light and watering when the top few centimeters of soil are dry.\n- Yellow leaves, especially with soft stems or constantly wet soil, usually indicate overwatering. Occasional yellowing of the oldest leaves is normal.\n- Limp, drooping, or curling leaves with dry soil indicate underwatering; the plant perks up after watering.\n- Brown, crispy tips or edges indicate underwatering or low humidity.\n- Brown or black spots with a yellow halo suggest bacterial or fungal leaf spot, often associated with overwatering.\n- Faded variegation, small leaves, and long bare vines indicate insufficient light. Bleached patches indicate too much direct sun.\n- Black, mushy stems near the soil indicate root or stem rot.\n- Common pests: mealybugs, spider mites, thrips, scale.",
+      "symptoms": [
+        "leaf_yellowing",
+        "drooping",
+        "leaf_curling",
+        "brown_tips",
+        "brown_edges",
+        "leaf_spots",
+        "pale_leaves",
+        "leggy_growth",
+        "scorch",
+        "mushy_rot",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "snake_plant": {
+      "name": "Snake plant (Dracaena trifasciata, syn. Sansevieria)",
+      "knowledge": "Snake plants are succulents that store water in their leaves. They should be watered only when the soil is completely dry; overwatering is the most common cause of decline.\n- Soft, mushy, yellowing leaves, especially at the base, and leaves collapsing or falling over indicate overwatering and root rot. This is serious.\n- Wrinkled, thinned, curled, or shriveled leaves indicate dehydration from underwatering.\n- Leaves flopping outward without mushiness can indicate too little light or overwatering.\n- Brown, dry tips are often caused by inconsistent watering or physical damage; a damaged tip does not regrow but is not harmful by itself.\n- Reddish-brown spots or lesions, sometimes with a yellow halo, suggest fungal leaf spot, often from water sitting on the leaves.\n- Bleached or pale patches indicate sudden exposure to strong direct sun.\n- Yellow leaf margins in variegated cultivars (e.g. 'Laurentii') and banded patterns are normal.\n- Common pests: mealybugs, spider mites.",
+      "symptoms": [
+        "mushy_rot",
+        "falling_over",
+        "wrinkling",
+        "leaf_curling",
+        "leaf_yellowing",
+        "brown_tips",
+        "leaf_spots",
+        "scorch",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "calathea": {
+      "name": "Calathea (Goeppertia)",
+      "knowledge": "Calatheas need consistently moist soil, high humidity, and bright indirect light. They are sensitive to minerals in tap water.\n- Leaves folding upward in the evening and lowering during the day is normal daily movement, not a symptom.\n- Leaves curling or rolling inward during the day indicate underwatering or low humidity.\n- Brown, crispy edges or tips indicate low humidity, tap water minerals (fluoride, chlorine, salts), or underwatering.\n- Yellowing leaves can indicate overwatering (often lower leaves) or underwatering. Occasional yellowing of an old leaf is normal.\n- Drooping, limp stems can indicate underwatering, root rot from overwatering, or cold drafts.\n- Faded, washed-out leaf patterns or scorched patches indicate too much direct light.\n- Spider mites are a common pest (fine webbing, speckled/stippled leaves); thrips and mealybugs also occur.",
+      "symptoms": [
+        "leaf_curling",
+        "brown_edges",
+        "brown_tips",
+        "leaf_yellowing",
+        "drooping",
+        "pale_leaves",
+        "scorch",
+        "leaf_spots",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "monstera": {
+      "name": "Monstera (Monstera deliciosa)",
+      "knowledge": "Monsteras prefer bright indirect light, watering when the top few centimeters of soil are dry, and something to climb.\n- Splits and holes (fenestrations) in mature leaves are normal. Young or low-light plants having solid, unsplit leaves is also normal.\n- Yellowing leaves, especially with wet soil, usually indicate overwatering. Occasional yellowing of the oldest, lowest leaf is normal.\n- Brown, crispy edges or tips indicate underwatering or low humidity.\n- Brown or black spots with a yellow halo suggest fungal or bacterial leaf spot, often from overwatering; dark, soft patches with wet soil suggest root rot.\n- Drooping or curling leaves with dry soil indicate underwatering.\n- Long stems with small, widely spaced, unsplit leaves leaning toward a window indicate insufficient light. Bleached patches indicate too much direct sun.\n- Stems leaning or flopping outward is common in larger plants without a support pole and is not necessarily a sign of disease.\n- Small water droplets on leaf edges or tips (guttation) are normal.\n- Common pests: thrips, spider mites, mealybugs, scale.",
+      "symptoms": [
+        "leaf_yellowing",
+        "brown_edges",
+        "brown_tips",
+        "leaf_spots",
+        "drooping",
+        "leaf_curling",
+        "scorch",
+        "pale_leaves",
+        "leggy_growth",
+        "falling_over",
+        "mushy_rot",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "zz_plant": {
+      "name": "ZZ plant (Zamioculcas zamiifolia)",
+      "knowledge": "ZZ plants store water in underground rhizomes and thick stems. They tolerate low light and drought, and should be watered only when the soil is completely dry. Overwatering is the most common cause of decline.\n- Yellowing leaflets and stems, especially several at once with wet soil, indicate overwatering. A soft, mushy, or dark stem base indicates rot and is serious.\n- A single old stem slowly yellowing while new stems emerge can be normal.\n- Wrinkled or shriveled leaflets and stems, or leaflets dropping with very dry soil, indicate severe underwatering.\n- Stems flopping or bending outward can indicate low light or overwatering.\n- Stretched stems with widely spaced leaflets leaning toward a window indicate insufficient light. Bleached or brown scorched patches indicate too much direct sun.\n- Glossy, waxy, deep green leaflets are normal; the 'Raven' cultivar is naturally near-black.\n- Pests are uncommon; mealybugs, scale, and spider mites occasionally occur.",
+      "symptoms": [
+        "leaf_yellowing",
+        "mushy_rot",
+        "drooping",
+        "falling_over",
+        "wrinkling",
+        "leaf_drop",
+        "brown_tips",
+        "leaf_spots",
+        "scorch",
+        "leggy_growth",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "fiddle_leaf_fig": {
+      "name": "Fiddle leaf fig (Ficus lyrata)",
+      "knowledge": "Fiddle leaf figs prefer bright light (including some direct sun once acclimated), watering when the top few centimeters of soil are dry, and a stable location. They react strongly to change.\n- Dark brown patches starting in the middle or along the edges of lower leaves, often spreading, indicate root rot from overwatering.\n- Light brown, crispy patches at the leaf edges indicate underwatering or low humidity.\n- Sudden leaf drop is often a reaction to being moved, drafts, temperature swings, or over- or underwatering.\n- Many tiny reddish-brown dots on new leaves (edema) come from uneven watering and are minor; they often fade as the leaf matures.\n- Yellowing leaves can indicate overwatering, low light, or nutrient deficiency. Occasional loss of the oldest, lowest leaf is normal.\n- Drooping or curling leaves can indicate underwatering or cold; slight drooping right after moving or repotting is common and usually temporary.\n- Bleached or tan scorched patches indicate sudden exposure to strong direct sun.\n- Long bare stems with small leaves leaning toward the light indicate insufficient light.\n- Common pests: spider mites, scale, mealybugs, thrips.",
+      "symptoms": [
+        "leaf_spots",
+        "brown_edges",
+        "leaf_drop",
+        "leaf_yellowing",
+        "drooping",
+        "leaf_curling",
+        "scorch",
+        "pale_leaves",
+        "leggy_growth",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "spider_plant": {
+      "name": "Spider plant (Chlorophytum comosum)",
+      "knowledge": "Spider plants are tolerant and fast-growing. They prefer bright indirect light and watering when the top few centimeters of soil are dry. They have thick, water-storing roots and are sensitive to fluoride and salts in tap water.\n- Brown leaf tips are very common and usually caused by fluoride, chlorine, or salts in tap water, excess fertilizer, or low humidity. A few brown tips alone are minor.\n- Yellowing leaves, or a mushy, dark base, indicate overwatering and possible root rot.\n- Pale, washed-out, or faded leaves indicate too much direct sun or nutrient deficiency; variegation fading in low light is common.\n- Limp, drooping leaves with dry soil indicate underwatering. Long arching leaves that hang over the pot edge are normal for this plant.\n- Long runners with baby plantlets (\"spiderettes\") and small white flowers are normal signs of a mature, healthy plant.\n- Thick white roots pushing out of the soil or pot indicate the plant is root-bound, not diseased.\n- Common pests: spider mites, aphids, scale, mealybugs.",
+      "symptoms": [
+        "brown_tips",
+        "leaf_yellowing",
+        "pale_leaves",
+        "drooping",
+        "falling_over",
+        "leaf_spots",
+        "scorch",
+        "mushy_rot",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    },
+    "aloe_vera": {
+      "name": "Aloe vera (Aloe barbadensis miller)",
+      "knowledge": "Aloe vera is a succulent that stores water in thick leaves. It needs bright light (ideally some direct sun) and should be watered only when the soil is completely dry.\n- Soft, mushy, translucent, or dark leaves, especially at the base, indicate overwatering and rot. This is serious.\n- Thin, wrinkled, or curled leaves that are concave or shriveled indicate underwatering.\n- Leaves flopping outward or lying flat, and long, stretched, pale growth leaning toward a window, indicate insufficient light.\n- Leaves turning reddish, orange, or brownish overall is a stress response, usually to strong sun or cold; mild coloring is not harmful.\n- Bleached, white, or tan patches indicate sunburn from a sudden change to strong direct sun.\n- Brown, dry tips are often from underwatering or age; dried-up lowest leaves at the base are normal aging.\n- Small white spots or speckles on young leaves are a normal trait of many aloe vera plants.\n- Offsets (pups) around the base are normal signs of a healthy plant.\n- Common pests: mealybugs, scale, aloe mites (cause lumpy, deformed growth).",
+      "symptoms": [
+        "mushy_rot",
+        "wrinkling",
+        "leaf_curling",
+        "falling_over",
+        "drooping",
+        "leaf_yellowing",
+        "brown_tips",
+        "leaf_spots",
+        "scorch",
+        "pale_leaves",
+        "leggy_growth",
+        "pests",
+        "dead_leaves",
+        "physical_damage",
+        "deformed_growth"
+      ]
+    }
+  },
+  "symptoms": {
+    "drooping": "Leaves or stems droop or wilt; the plant looks limp",
+    "leaf_yellowing": "Leaves partly or entirely yellow",
+    "brown_tips": "Brown, dry leaf tips",
+    "brown_edges": "Brown, crispy leaf margins",
+    "leaf_spots": "Distinct brown or black spots/lesions on the leaf surface, often with a yellow halo",
+    "scorch": "Bleached, whitish or tan sunburned patches",
+    "leaf_curling": "Leaves curl, roll, or cup",
+    "wrinkling": "Leaves wrinkled, thinned, or shriveled",
+    "mushy_rot": "Soft, mushy, dark tissue on stems, base, trunk, or leaves",
+    "leaf_drop": "Leaves fallen or falling off; sparse foliage",
+    "pale_leaves": "Pale, faded, or washed-out leaf color or variegation",
+    "leggy_growth": "Stretched stems with sparse or small leaves, leaning toward the light",
+    "falling_over": "Leaves or stems flopping, bending, or collapsing outward",
+    "pests": "Visible insects, webbing, sticky residue, or stippling damage",
+    "powdery_coating": "White powdery or fuzzy coating on leaves",
+    "dead_leaves": "Entire leaves dead: fully brown, black, dried, or papery",
+    "physical_damage": "Holes, tears, cuts, or broken leaves/stems",
+    "deformed_growth": "Misshapen, stunted, or distorted new leaves",
+    "other": "Other visible abnormality (describe in the note)"
+  }
+}
