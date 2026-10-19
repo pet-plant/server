@@ -1,0 +1,24 @@
+# Overlay for hosts whose VLM and LLM run elsewhere (SageMaker over Tailscale,
+# OpenAI, ...). Compose this over compose.yaml:
+#
+#   docker compose -f compose.yaml -f compose.remote.yaml up --build
+#
+# web and worker build the slim docker/Dockerfile.remote (no torch /
+# transformers), and the VLM defaults to the `POST /generate` backend. Set
+# VLM_API_BASE (and LLM_API_KEY for OpenAI) in .env. Hosts that run InternVL
+# in-process keep using plain compose.yaml.
+services:
+  web:
+    build:
+      dockerfile: docker/Dockerfile.remote
+    environment:
+      VLM_PROVIDER: ${VLM_PROVIDER:-http}
+    volumes: !reset []
+
+  worker:
+    build:
+      dockerfile: docker/Dockerfile.remote
+
+  migrate:
+    build:
+      dockerfile: docker/Dockerfile.remote
